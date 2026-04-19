@@ -464,7 +464,7 @@ function spawnSingleMathBlock(scene, i) {
     
     block.mathData = { a: factorA, b: factorB, result: factorA * factorB, type: blockType, index: i };
     
-    let txt = scene.add.text(x, y, `${factorA}x${factorB}`, { fontSize: '30px', fill: '#FFF', align: 'center', fontWeight: 'bold', fontFamily: 'Comic Sans MS, cursive' });
+    let txt = scene.add.text(x, y, `${factorA}x${factorB}`, { fontSize: '30px', fill: '#FFF', align: 'center', fontWeight: 'bold', fontFamily: 'Arial, sans-serif' });
     txt.setOrigin(0.5);
     txt.setRotation(Phaser.Math.FloatBetween(-0.05, 0.05));
     mathTextsGroup.add(txt);
@@ -652,7 +652,7 @@ function spawnAnswerCoins(scene, prob) {
             repeat: -1
         });
         
-        let numTxt = scene.add.text(x, y - 35, answers[i].toString(), { fontSize: '32px', fill: '#FFF', fontStyle: 'bold', fontFamily: 'Comic Sans MS, sans-serif' });
+        let numTxt = scene.add.text(x, y - 35, answers[i].toString(), { fontSize: '32px', fill: '#FFF', fontStyle: 'bold', fontFamily: 'Arial, sans-serif' });
         numTxt.setOrigin(0.5);
         numTxt.setRotation(Phaser.Math.FloatBetween(-0.2, 0.2)); 
         coin.linkedText = numTxt;
