@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+    <!-- Fondo redondeado oscuro estilo App de iPad -->
+    <rect width="512" height="512" fill="#202225" rx="112"/>
+    <!-- Anillo circular evasivo neon -->
+    <circle cx="256" cy="256" r="160" stroke="#00ffcc" stroke-width="14" fill="none" opacity="0.35"/>
+    <circle cx="256" cy="256" r="220" stroke="#ff0000" stroke-width="6" stroke-dasharray="10 20" fill="none" opacity="0.3"/>
+    
+    <!-- Propulsor Motor Base -->
+    <g transform="translate(0, 30)">
+        <polygon points="256,140 160,360 352,360" fill="#ffffff" filter="drop-shadow(0px 8px 12px rgba(0,0,0,0.5))"/>
+        <polygon points="256,140 160,360 256,310" fill="#e0e0e0"/>
+        <!-- Fuego del propulsor -->
+        <circle cx="256" cy="385" r="22" fill="#ff4d4d"/>
+        <circle cx="256" cy="375" r="12" fill="#ffcc00"/>
+    </g>
+</svg>

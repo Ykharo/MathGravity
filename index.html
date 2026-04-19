@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Math Gravity Arcade</title>
+
+    <!-- PWA Offline Tags -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon.svg">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#F57C00">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #E65100; /* Naranja base */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* Contenedor del juego para mantener el aspect ratio en PC y Mobile */
+        #game-container {
+            width: 100%;
+            height: 100%;
+            max-width: 600px; /* Limitar el ancho en pantallas grandes para mantener look vertical */
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            background-color: #F57C00;
+        }
+        
+        canvas {
+            display: block;
+        }
+
+        #ui-overlay {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            pointer-events: none;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+    <script>
+        var GLOBAL_TENSION = 0.5;
+        var GLOBAL_DRAG = 0.001;
+        var GLOBAL_MAX_VEL = 150;
+        var GLOBAL_ENGINE = 5.0;
+        var GLOBAL_RADIO_GIRO = 8.0;
+        var GLOBAL_AUTOPILOT = false;
+        
+        function togglePause() {
+            if (window.gameScene) window.gameScene.togglePause();
+        }
+        
+        function activateSingularity() {
+            if (window.gameScene) window.gameScene.triggerSingularity();
+        }
+        
+        function updatePhysVar(name, val) {
+            document.getElementById('val' + name).innerText = val;
+            if (name === 'Tension') GLOBAL_TENSION = parseFloat(val);
+            if (name === 'Engine') GLOBAL_ENGINE = parseFloat(val);
+            if (name === 'Turn') GLOBAL_RADIO_GIRO = parseFloat(val);
+            if (name === 'Drag') {
+                GLOBAL_DRAG = parseFloat(val);
+                if (window.player) window.player.setDrag(GLOBAL_DRAG);
+            }
+            if (name === 'MaxVel') {
+                GLOBAL_MAX_VEL = parseInt(val);
+                if (window.player) window.player.setMaxVelocity(GLOBAL_MAX_VEL);
+            }
+        }
+        
+        function toggleLab() {
+            var lab = document.getElementById('debug-panel');
+            lab.style.display = (lab.style.display === 'none') ? 'block' : 'none';
+        }
+
+        // PWA Offline Registration
+        if('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').then((reg) => {
+                    console.log('SW Registered: ', reg.scope);
+                }).catch((err) => {
+                    console.log('SW Registration FAILED: ', err);
+                });
+            });
+        }
+    </script>
+</head>
+<body>
+    <button id="btn-pause" onclick="togglePause()" style="position: absolute; top: 20px; left: 20px; z-index: 2000; font-family: monospace; font-size: 20px; cursor: pointer; color: #fff; background: rgba(0,0,0,0.6); padding: 8px 15px; border-radius: 8px; border: 1px solid #fff;">
+        ⏸ PAUSA
+    </button>
+
+    <div id="ui-overlay">
+        <span>Puntuación: <span id="score">0</span></span>
+    </div>
+    
+    <div style="position: absolute; bottom: 20px; right: 20px; z-index: 2000; display: flex; flex-direction: column; align-items: flex-end; gap: 10px;">
+        <button id="btn-singularity" onclick="activateSingularity()" style="font-family: monospace; font-size: 16px; font-weight: bold; cursor: pointer; color: #888; background: rgba(0,0,0,0.8); padding: 8px 15px; border-radius: 8px; border: 2px solid #555; pointer-events: none; transition: all 0.3s; display: none;">
+            NUCLEO TEMPORAL: 0/3
+        </button>
+
+        <label id="btn-autopilot" style="font-family: monospace; font-size: 18px; cursor: pointer; color: #00ffff; background: rgba(0,0,0,0.8); padding: 10px 20px; border-radius: 8px; border: 2px solid #0ff; transition: all 0.3s; margin: 0;">
+            <input type="checkbox" onchange="
+                window.GLOBAL_AUTOPILOT=this.checked; 
+                document.getElementById('btn-autopilot').style.borderColor = this.checked ? '#0f0' : '#0ff';
+                document.getElementById('btn-autopilot').style.color = this.checked ? '#0f0' : '#0ff';
+            " style="transform: scale(1.5); margin-right: 12px; cursor: pointer;">
+            Auto-Piloto Evasivo
+        </label>
+    </div>
+    
+    <button onclick="toggleLab()" style="position: absolute; top: 20px; right: 20px; z-index: 2000; font-size: 20px; cursor: pointer; background: rgba(0,0,0,0.6); color: white; border: 1px solid white; border-radius: 8px; padding: 8px; font-family: monospace;">
+        ⚙️ LAB
+    </button>
+
+    <!-- PANEL DE DEBUG PROVISORIO -->
+    <div id="debug-panel" style="display: none; position: absolute; bottom: 20px; left: 20px; background: rgba(0,0,0,0.85); color: #0f0; padding: 15px; border-radius: 8px; z-index: 1000; font-family: monospace; border: 1px solid #0f0; max-height: 85%; overflow-y: auto;">
+        <h4 style="margin: 0 0 10px 0; color: #fff;">Laboratorio de Físicas</h4>
+        
+        <label>Aceleración (Fondo Trasero): <span id="valTension">0.5</span></label><br>
+        <input type="range" min="0.5" max="30" step="0.5" value="0.5" oninput="updatePhysVar('Tension', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+
+        <label>Fuerza Transversal (Radio/Curva de Giro): <span id="valTurn">8.0</span></label><br>
+        <input type="range" min="1" max="30" step="0.5" value="8.0" oninput="updatePhysVar('Turn', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+
+        <label>Motor (Auto-Empuje): <span id="valEngine">5</span></label><br>
+        <input type="range" min="0" max="600" step="1" value="5" oninput="updatePhysVar('Engine', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+        
+        <label>Fricción (Patinar - Drag): <span id="valDrag">0.001</span></label><br>
+        <input type="range" min="0.001" max="0.3" step="0.005" value="0.001" oninput="updatePhysVar('Drag', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+        
+        <label>Límite Velocidad Max: <span id="valMaxVel">150</span></label><br>
+        <input type="range" min="50" max="1500" step="50" value="150" oninput="updatePhysVar('MaxVel', this.value)" style="width: 100%;">
+    </div>
+
+    <div id="game-container"></div>
+
+    <script src="game.js"></script>
+</body>
+</html>
