@@ -92,8 +92,19 @@
         var GLOBAL_MAX_VEL = 150;
         var GLOBAL_ENGINE = 5.0;
         var GLOBAL_RADIO_GIRO = 8.0;
-        var GLOBAL_AUTOPILOT = false;
+        var GLOBAL_AUTOPILOT = true;
         var GLOBAL_VALID_TABLES = [1,2,3,4,5,6,7,8,9,10];
+        
+        var audioCtx = null;
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            window.GLOBAL_AUDIO_CTX = audioCtx;
+        }
         
         function updateValidTables() {
             let active = [];
@@ -110,6 +121,7 @@
         }
 
         function startGameFromMenu(mode) {
+            initAudio();
             document.getElementById('main-menu').style.display = 'none';
             document.getElementById('btn-back-menu').style.display = 'block';
             if (window.gameScene) {
@@ -190,8 +202,8 @@
             NUCLEO TEMPORAL: 0/3
         </button>
 
-        <label id="btn-autopilot" style="font-family: monospace; font-size: 18px; cursor: pointer; color: #00ffff; background: rgba(0,0,0,0.8); padding: 10px 20px; border-radius: 8px; border: 2px solid #0ff; transition: all 0.3s; margin: 0;">
-            <input type="checkbox" onchange="
+        <label id="btn-autopilot" style="font-family: monospace; font-size: 18px; cursor: pointer; color: #0f0; background: rgba(0,0,0,0.8); padding: 10px 20px; border-radius: 8px; border: 2px solid #0f0; transition: all 0.3s; margin: 0;">
+            <input type="checkbox" checked onchange="
                 window.GLOBAL_AUTOPILOT=this.checked; 
                 document.getElementById('btn-autopilot').style.borderColor = this.checked ? '#0f0' : '#0ff';
                 document.getElementById('btn-autopilot').style.color = this.checked ? '#0f0' : '#0ff';

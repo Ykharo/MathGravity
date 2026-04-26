@@ -58,14 +58,59 @@ let currentPhase = "WAITING_BLOCK"; // "WAITING_BLOCK" o "WAITING_ANSWER"
 
 // Modos de Juego y Progreso
 let currentGameMode = 0; // 0=Menu, 1=Secuencial, 2=Aleatorio Tabla, 3=Survival
+
+// --- AUDIO SYSTEM (Oscillators & TTS) ---
+function playTone(freq, type, duration) {
+    if (!window.GLOBAL_AUDIO_CTX) return;
+    let osc = window.GLOBAL_AUDIO_CTX.createOscillator();
+    let gain = window.GLOBAL_AUDIO_CTX.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, window.GLOBAL_AUDIO_CTX.currentTime);
+    gain.gain.setValueAtTime(0.1, window.GLOBAL_AUDIO_CTX.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.00001, window.GLOBAL_AUDIO_CTX.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(window.GLOBAL_AUDIO_CTX.destination);
+    osc.start();
+    osc.stop(window.GLOBAL_AUDIO_CTX.currentTime + duration);
+}
+
+function playExplosion() {
+    playTone(100, 'square', 0.2);
+    setTimeout(() => playTone(50, 'sawtooth', 0.3), 50);
+}
+
+function playSuccess() {
+    playTone(400, 'sine', 0.1);
+    setTimeout(() => playTone(600, 'sine', 0.2), 100);
+}
+
+function playLevelUp() {
+    playTone(300, 'square', 0.1);
+    setTimeout(() => playTone(400, 'square', 0.1), 100);
+    setTimeout(() => playTone(500, 'square', 0.2), 200);
+    setTimeout(() => playTone(800, 'sine', 0.4), 300);
+}
+
+function speakText(text) {
+    if ('speechSynthesis' in window) {
+        let utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'es-LA'; // Español Latinoamericano
+        utterance.rate = 1.1;
+        window.speechSynthesis.speak(utterance);
+    }
+}
+// ----------------------------------------
 let currentTableIndex = 0;
 let currentStep = 1;
 let pendingTableSteps = [];
 
-// Variables para el rastro y movimiento fluido
+// Rastro y movimiento
 let targetX = 0;
 let targetY = 0;
 let trailEmitter;
+
+let globalRingRotation = 0;
+let gapGrowths = [0, 0, 0, 0];
 
 function preload() {
     // Al ser minimalista, no cargamos imágenes externas. Dibujaremos todo dinámicamente con Phaser Graphics.
@@ -140,6 +185,7 @@ function create() {
         currentTableIndex = 0;
         currentStep = 1;
         pendingTableSteps = [1,2,3,4,5,6,7,8,9,10];
+        window.blockTypeMemory = {};
         
         score = 0;
         gameLevel = 1;
@@ -171,6 +217,13 @@ function create() {
         enemiesGroup.clear(true, true);
         answersGroup.getChildren().forEach(c => { if(c.linkedText) c.linkedText.destroy(); });
         answersGroup.clear(true, true);
+        
+        // Resetear anillos para la próxima partida
+        ringGroup.clear(true, true);
+        gapGrowths = [0, 0, 0, 0];
+        globalRingRotation = 0;
+        dibujarYCrearParedesAnillo(this);
+        
         isGamePaused = true;
     };
 
@@ -195,6 +248,9 @@ function create() {
     player.setDamping(true);
     player.setDrag(window.GLOBAL_DRAG || 0.04); // Fluidez de arrastre, simula inercia
     player.setMaxVelocity(window.GLOBAL_MAX_VEL || 400);
+    // Añadimos rebote fuerte (campo de energía) para los muros
+    player.body.setBounce(1.5, 1.5);
+    
     // Exponer el player al DOM para los sliders
     window.player = player;
     
@@ -216,14 +272,7 @@ function create() {
         collideWorldBounds: true // Que reboten en los bordes
     });
     
-    // 5.1 Crear contenedor de paredes rotatorias
-    ringObstacles = this.add.container(config.width/2, config.height/2);
-    this.tweens.add({
-        targets: ringObstacles,
-        angle: 360,
-        duration: 30000,
-        repeat: -1
-    });
+    // Contenedor visual de paredes eliminado (usamos perlas renderizadas)
 
     ringGroup = this.physics.add.group({
         immovable: true,
@@ -251,6 +300,13 @@ function create() {
     // Colisiones con Monedas Creadas (Respuestas)
     // Usamos collider en vez de overlap para poder rebotar en las falsas. Resolvelo en la función logica
     this.physics.add.collider(player, answersGroup, hitAnswerCoin, null, this);
+    
+    // Si estamos reiniciando la escena y el modo ya está elegido, arrancamos los bloques
+    if (currentGameMode !== 0 && !isGameOver) {
+        this.time.delayedCall(100, () => {
+             spawnMathBlocks(this);
+        });
+    }
     
     // Textura dinámica UI de Vida a la esquina superior derecha
     healthBarText = this.add.text(config.width - 20, 30, obtenerVidaSegmentada(playerHealth), { fontSize: '18px', fill: '#FFF', fontStyle: 'bold', align: 'right', fontFamily: 'monospace' });
@@ -291,13 +347,10 @@ function update() {
         }
     }
 
-    // Actualizar dinámicamente las rotaciones de las físicas del grupo del contenedor para sincronizar visual y colisionador
-    Phaser.Actions.RotateAroundDistance(ringGroup.getChildren(), { x: config.width / 2, y: config.height / 2 }, 0.003 * timeDilation, config.width * 0.35);
-    
-    // Sincronizar rotación visual con la rotación física del bucle
-    ringGroup.children.iterate(function (wall) {
-        if(wall) wall.rotation += 0.003 * timeDilation;
-    });
+    // Actualizar rotaciones físicas y visuales al mismo tiempo (perlas visibles circulares)
+    let rotAmount = 0.003 * timeDilation;
+    globalRingRotation += rotAmount;
+    Phaser.Actions.RotateAroundDistance(ringGroup.getChildren(), { x: config.width / 2, y: config.height / 2 }, rotAmount, config.width * 0.35);
 
     // Configuración Variables Vivo
     let tension = window.GLOBAL_TENSION || 8;
@@ -361,6 +414,29 @@ function update() {
                 }
             });
         }
+        // MAGNETISMO A MONEDAS DIRIGIDO POR CURSOR: Evita orbitar y choques accidentales
+        if (typeof answersGroup !== 'undefined' && currentPhase === "WAITING_ANSWER") {
+             answersGroup.getChildren().forEach(coin => {
+                 if (coin.active) {
+                     // Distancia del PUNTERO a la moneda
+                     let dxPointer = coin.x - targetX;
+                     let dyPointer = coin.y - targetY;
+                     let distPointerToCoin = Math.sqrt(dxPointer*dxPointer + dyPointer*dyPointer);
+                     
+                     // Si el puntero está exactamente sobre/muy cerca de la moneda
+                     if (distPointerToCoin < 40) { 
+                         // Fuerza de succión de la nave hacia la moneda
+                         let cx = coin.x - player.x;
+                         let cy = coin.y - player.y;
+                         let cDist = Math.sqrt(cx*cx + cy*cy);
+                         if (cDist > 0) {
+                             aiX += (cx / cDist) * 5000;
+                             aiY += (cy / cDist) * 5000;
+                         }
+                     }
+                 }
+             });
+        }
         
         player.body.setAcceleration(aiX + engX, aiY + engY);
 
@@ -406,9 +482,9 @@ function update() {
     // Lógica Evolutiva de Enemigos
     enemiesGroup.children.iterate(function (enemy) {
         if(enemy && enemy.active) {
-             if (gameLevel === 1) {
+             if (gameLevel === 1 || currentGameMode === 1 || currentGameMode === 2) {
                  enemy.rotation += 0.05; // Tontos pero con giro independiente
-             } else if (gameLevel === 2) {
+             } else if (gameLevel === 2 && currentGameMode === 3) {
                  // Nivel 2: Comportamiento Enjambre Cazador (Swarm - Boids)
                  let anguloJugador = Phaser.Math.Angle.Between(enemy.x, enemy.y, player.x, player.y);
                  
@@ -458,13 +534,28 @@ function spawnSingleMathBlock(scene, i, forcedA = null, forcedB = null) {
     let blockType = "NORMAL";
     let tex = 'blockTex_orange';
     
-    let randType = Math.random();
-    if (playerHealth <= 75 && randType < 0.20) {
-        blockType = "HEAL";
-        tex = 'blockTex_green';
-    } else if (randType > 0.85 && randType <= 0.95) { 
-        blockType = "SHIELD";
-        tex = 'blockTex_cyan';
+    let memKey = null;
+    if (forcedA !== null && forcedB !== null && (currentGameMode === 1 || currentGameMode === 2)) {
+         memKey = `${forcedA}x${forcedB}`;
+    }
+
+    if (memKey && window.blockTypeMemory && window.blockTypeMemory[memKey]) {
+         blockType = window.blockTypeMemory[memKey];
+         tex = (blockType === "HEAL") ? 'blockTex_green' : ((blockType === "SHIELD") ? 'blockTex_cyan' : 'blockTex_orange');
+    } else {
+         let randType = Math.random();
+         if (playerHealth <= 75 && randType < 0.20) {
+             blockType = "HEAL";
+             tex = 'blockTex_green';
+         } else if (randType > 0.85 && randType <= 0.95) { 
+             blockType = "SHIELD";
+             tex = 'blockTex_cyan';
+         }
+         
+         if (memKey) {
+             window.blockTypeMemory = window.blockTypeMemory || {};
+             window.blockTypeMemory[memKey] = blockType;
+         }
     }
 
     let block = mathBlocksGroup.create(x, y, tex);
@@ -568,6 +659,7 @@ function hitMathBlock(player, block) {
     
     currentPhase = "WAITING_ANSWER";
     activeProblem = block.mathData;
+    speakText(`¿Cuánto es ${activeProblem.a} por ${activeProblem.b}?`);
     
     // Tintinar el bloque elegido permanentemente
     block.setTint(0xFFFF00);
@@ -598,6 +690,9 @@ function hitAnswerCoin(player, coin) {
 
     if (coin.isCorrect) {
         // --- RESPUESTA CORRECTA ---
+        playSuccess();
+        speakText(`¡Correcto!, ${activeProblem.a} por ${activeProblem.b} es ${activeProblem.result}`);
+        
         score += 1;
         document.getElementById('score').innerText = score;
         
@@ -626,16 +721,28 @@ function hitAnswerCoin(player, coin) {
         let ring = this.add.circle(coin.x, coin.y, 10, 0x00ff00);
         this.tweens.add({ targets: ring, scale: 5, alpha: 0, duration: 300, onComplete: () => { ring.destroy(); }});
         
-        // CONTROL DE PROGRESIÓN (Score 10 -> Switch Nivel 2)
-        if (score === 10 && gameLevel === 1) {
+        // Humo de victoria (Número gigante)
+        let humoTxt = this.add.text(coin.x, coin.y, activeProblem.result.toString(), { fontSize: '40px', fill: '#00FF00', fontWeight: 'bold' });
+        humoTxt.setOrigin(0.5);
+        this.tweens.add({
+            targets: humoTxt,
+            scale: 6,
+            alpha: 0,
+            y: coin.y - 120, // flota hacia arriba como humo
+            duration: 1200,
+            ease: 'Power2',
+            onComplete: () => humoTxt.destroy()
+        });
+        
+        // CONTROL DE PROGRESIÓN MODO 3
+        if (currentGameMode === 3 && score % 15 === 0 && score > 0) {
              gameLevel = 2;
-             let lvlText = this.add.text(config.width/2, config.height/2, "¡RANGO ALCANZADO!\nINICIANDO NIVEL 2", { fontSize: '40px', fill: '#00FFFF', align: 'center', fontStyle: 'bold', stroke: '#000', strokeThickness: 6 });
+             let lvlText = this.add.text(config.width/2, config.height/2, "¡RANGO ALCANZADO!\nNIVEL AUMENTADO", { fontSize: '40px', fill: '#00FFFF', align: 'center', fontStyle: 'bold', stroke: '#000', strokeThickness: 6 });
              lvlText.setOrigin(0.5);
              this.tweens.add({ targets: lvlText, scale: 1.5, alpha: 0, duration: 3000, ease: 'Power1', hold: 1000, yoyo: true, onComplete: () => lvlText.destroy() });
              
-             this.updateSingularityUI(); // Revelar arma temporal
+             this.updateSingularityUI(); 
              
-             // Mutar enemigos existentes a color rojo letal indicando furia rastreadora
              enemiesGroup.getChildren().forEach(e => {
                   e.setTint(0xff0000);
              });
@@ -647,6 +754,13 @@ function hitAnswerCoin(player, coin) {
              if (currentStep > 10) {
                  currentStep = 1;
                  currentTableIndex++;
+                 enemiesGroup.clear(true, true);
+                 playLevelUp();
+                 
+                 let lvlText = this.add.text(config.width/2, config.height/2, "¡TABLA COMPLETADA!", { fontSize: '40px', fill: '#00FF00', align: 'center', fontStyle: 'bold', stroke: '#000', strokeThickness: 6 });
+                 lvlText.setOrigin(0.5);
+                 this.tweens.add({ targets: lvlText, scale: 1.5, alpha: 0, duration: 3000, ease: 'Power1', hold: 1000, yoyo: true, onComplete: () => lvlText.destroy() });
+
                  if (currentTableIndex >= window.GLOBAL_VALID_TABLES.length) {
                      alert("¡Modo Secuencial Completado!");
                      window.returnToMenu();
@@ -658,6 +772,13 @@ function hitAnswerCoin(player, coin) {
              if (pendingTableSteps.length === 0) {
                  currentTableIndex++;
                  pendingTableSteps = [1,2,3,4,5,6,7,8,9,10];
+                 enemiesGroup.clear(true, true);
+                 playLevelUp();
+
+                 let lvlText = this.add.text(config.width/2, config.height/2, "¡TABLA COMPLETADA!", { fontSize: '40px', fill: '#00FF00', align: 'center', fontStyle: 'bold', stroke: '#000', strokeThickness: 6 });
+                 lvlText.setOrigin(0.5);
+                 this.tweens.add({ targets: lvlText, scale: 1.5, alpha: 0, duration: 3000, ease: 'Power1', hold: 1000, yoyo: true, onComplete: () => lvlText.destroy() });
+
                  if (currentTableIndex >= window.GLOBAL_VALID_TABLES.length) {
                      alert("¡Modo Aleatorio por Tabla Completado!");
                      window.returnToMenu();
@@ -692,6 +813,7 @@ function hitAnswerCoin(player, coin) {
 
     } else {
         // --- RESPUESTA FALSA ---
+        playExplosion();
         this.cameras.main.shake(100, 0.01); 
         
         // Rebote Físico Coin
@@ -755,20 +877,59 @@ function spawnAnswerCoins(scene, prob) {
     }
 }
 
+function spawnSinglePearl(scene, rad, radius, arcoGrozor) {
+     let px = config.width / 2 + Math.cos(rad) * radius;
+     let py = config.height / 2 + Math.sin(rad) * radius;
+     
+     let perla = ringGroup.create(px, py, 'perlaTex');
+     perla.setOrigin(0.5);
+     perla.body.setCircle(arcoGrozor/2);
+     perla.setTint(0xFFFFFF);
+     perla.setAlpha(0.7);
+     
+     scene.tweens.add({
+         targets: perla,
+         alpha: 0.2,
+         duration: Phaser.Math.Between(500, 1000),
+         yoyo: true,
+         repeat: -1
+     });
+}
+
 function spawnWall(scene) {
     let radius = config.width * 0.35;
-    let createdWalls = ringGroup.getChildren().length;
-    let rad = (Math.PI * 2 / 12) * createdWalls; 
+    let arcoGrozor = 18;
     
-    let x = config.width / 2 + Math.cos(rad) * radius;
-    let y = config.height / 2 + Math.sin(rad) * radius;
+    // Las perlas se ubican según la misma métrica simétrica
+    let angularStep = Math.PI / 2; // 90 grados entre cruces
+    let wallArc = Math.PI / 4; // 45 grados de muro inicial
+    let numPerlasBase = 10;
+    let perlaPaso = wallArc / (numPerlasBase - 1);
+    let perlasPorCrecimiento = 3; // Crece de 3 en 3
+    let maxGrowths = 3; // 3 crecimientos = 9 perlas extras por hueco
     
-    let wall = ringGroup.create(x, y, 'wallTex');
-    wall.rotation = rad + Math.PI/2;
-    let arcoGrozor = 20;
-    let arcoLongitud = 120; 
-    wall.body.setSize(arcoLongitud, arcoGrozor);
-    wall.setTint(0xFFFFFF);
+    let availableGaps = [];
+    for(let i=0; i<4; i++) {
+        if(gapGrowths[i] < maxGrowths) availableGaps.push(i);
+    }
+    
+    if(availableGaps.length === 0) return; // Todo cerrado
+    
+    // Elegimos un hueco al azar para añadirle 3 perlas
+    let chosenGap = Phaser.Utils.Array.GetRandom(availableGaps);
+    let currentGrowths = gapGrowths[chosenGap];
+    
+    // Calcula dónde empieza a crecer el gap actual
+    // Base + Muro inicial + (Las perlas que ya han crecido) + 1 paso para no pisar la anterior
+    let startAngle = (angularStep * chosenGap) + wallArc + perlaPaso + (currentGrowths * perlasPorCrecimiento * perlaPaso);
+    
+    for(let j=0; j<perlasPorCrecimiento; j++) {
+         let localRad = startAngle + (j * perlaPaso);
+         let rad = localRad + globalRingRotation;
+         spawnSinglePearl(scene, rad, radius, arcoGrozor);
+    }
+    
+    gapGrowths[chosenGap]++;
 }
 
 
@@ -828,6 +989,10 @@ function createCustomTextures(scene) {
 }
 
 function spawnEnemy(scene) {
+    if ((currentGameMode === 1 || currentGameMode === 2) && enemiesGroup.getChildren().length >= 5) {
+        return; // Máximo 5 naves en Modos 1 y 2
+    }
+    
     let x, y;
     do {
          x = Phaser.Math.Between(20, config.width - 20);
@@ -836,6 +1001,7 @@ function spawnEnemy(scene) {
 
     let enemy = enemiesGroup.create(x, y, 'enemyTex');
     enemy.body.setCircle(12, 0, 0); 
+    // Restablecido a 1 para evitar loop infinito de colisiones exponenciales
     enemy.body.setBounce(1, 1); 
     
     // Si estamos en nivel 2 avanzardo, nacen ya furiosos
@@ -892,6 +1058,7 @@ function hitEnemy(player, enemy) {
     if(isGameOver) return;
 
     if (hasShield) { // Escudo Neon rompe enemigos!
+        playExplosion();
         let ring = this.add.circle(enemy.x, enemy.y, 15, 0x00FFFF);
         this.tweens.add({ targets: ring, scale: 3, alpha: 0, duration: 200, onComplete: () => { ring.destroy(); }});
         enemy.destroy();
@@ -900,6 +1067,7 @@ function hitEnemy(player, enemy) {
     }
     
     // Si no hay escudo, rebote dramático y daño
+    playExplosion();
     this.cameras.main.shake(100, 0.01);
     
     let bouncePoint = new Phaser.Math.Vector2(player.x - enemy.x, player.y - enemy.y);
@@ -970,28 +1138,31 @@ function dibujarAnilloCentral(scene) {
 }
 
 function dibujarYCrearParedesAnillo(scene) {
-    let radius = config.width * 0.35;
-    
     let arcoGrozor = 18;
-    let arcoLongitudVisual = 120; 
-    let gr = scene.make.graphics();
-    gr.fillStyle(0xFFFFFF, 1);
     
-    gr.fillRoundedRect(-arcoLongitudVisual/2, -arcoGrozor/2, arcoLongitudVisual, arcoGrozor, arcoGrozor/2); 
-    gr.generateTexture('wallTex', arcoLongitudVisual, arcoGrozor);
-    gr.clear();
+    // Textura de perla brillante
+    if (!scene.textures.exists('perlaTex')) {
+        let gr = scene.make.graphics();
+        gr.fillStyle(0xFFFFFF, 1);
+        gr.fillCircle(arcoGrozor/2, arcoGrozor/2, arcoGrozor/2);
+        gr.generateTexture('perlaTex', arcoGrozor, arcoGrozor);
+        gr.clear();
+    }
 
-    let numWalls = 4; 
-    for (let i = 0; i < numWalls; i++) {
-        let rad = (Math.PI * 2 / 12) * i; 
-        
-        let x = config.width / 2 + Math.cos(rad) * radius;
-        let y = config.height / 2 + Math.sin(rad) * radius;
+    gapGrowths = [0, 0, 0, 0];
+    let radius = config.width * 0.35;
+    let angularStep = Math.PI / 2;
+    let wallArc = Math.PI / 4;
+    let numPerlasBase = 10;
+    let perlaPaso = wallArc / (numPerlasBase - 1);
 
-        let wall = ringGroup.create(x, y, 'wallTex');
-        wall.rotation = rad + Math.PI/2;
+    // 4 Muros iniciales completamente simétricos en cruz
+    for (let i = 0; i < 4; i++) {
+        let baseAngle = angularStep * i; 
         
-        wall.body.setSize(arcoLongitudVisual, arcoGrozor);
-        wall.setTint(0xFFFFFF);
+        for (let j = 0; j < numPerlasBase; j++) {
+             let rad = baseAngle + (j * perlaPaso);
+             spawnSinglePearl(scene, rad, radius, arcoGrozor);
+        }
     }
 }

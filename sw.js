@@ -1,4 +1,4 @@
-const CACHE_NAME = 'math-gravity-v1';
+const CACHE_NAME = 'math-gravity-v10';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
