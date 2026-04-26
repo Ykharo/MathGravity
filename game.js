@@ -615,103 +615,86 @@ function update() {
     // Lógica Evolutiva de Enemigos
     enemiesGroup.children.iterate(function (enemy) {
         if(enemy && enemy.active) {
-             if (gameLevel === 1 || currentGameMode === 1 || currentGameMode === 2) {
-                 enemy.rotation += 0.05; // Tontos pero con giro independiente
-             } else if (gameLevel === 2 && currentGameMode === 3) {
-                 // Nivel 2: Comportamiento Enjambre Cazador (Swarm - Boids)
-                 let anguloJugador = Phaser.Math.Angle.Between(enemy.x, enemy.y, player.x, player.y);
-                 
-                 // Singularidad: Giran lenamente arrastrados por la gelatina
-                 let anguloObjetivo = anguloJugador + Math.PI / 2;
-                 let diff = Phaser.Math.Angle.ShortestBetween(Phaser.Math.RadToDeg(enemy.rotation), Phaser.Math.RadToDeg(anguloObjetivo));
-                 enemy.rotation += Phaser.Math.DegToRad(diff) * (timeDilation === 1.0 ? 1.0 : 0.05 * timeDilation);
-                 
-                 // Vector Atracción al Jugador (Seek) aplastado por el tiempo
-                 let speed = 45 * timeDilation;
-                 let vX = Math.cos(anguloJugador) * speed;
-                 let vY = Math.sin(anguloJugador) * speed;
-                 
-                 // Vector Separación
-                 enemiesGroup.getChildren().forEach(otro => {
-                     if (otro !== enemy && otro.active) {
-                         let dx = enemy.x - otro.x;
-                         let dy = enemy.y - otro.y;
-                         let dist2 = dx*dx + dy*dy;
-                         if (dist2 > 0 && dist2 < 2500) { 
-                             let distReal = Math.sqrt(dist2);
-                             let panicoGrupal = (50 - distReal) * 2 * timeDilation; // Efecto frenado
-                             vX += (dx / distReal) * panicoGrupal;
-                             vY += (dy / distReal) * panicoGrupal;
-                         }
-                     }
-                 });
-                 
-                 // Forzamos las velocidades vectorizadas mezcladas
-                 enemy.body.setVelocity(vX, vY);
-                 
-                 // IA DE DISPARO PARA NAVES ROJAS
-                 if (enemy.texture && enemy.texture.key === 'enemyShieldTex') {
-                     let distToPlayer = Phaser.Math.Distance.Between(enemy.x, enemy.y, player.x, player.y);
-                     let radarRange = 250;
-                     
-                     if (distToPlayer < radarRange) {
-                         // DIBUJAR RADAR ENEMIGO
-                         enemyRadarGraphics.lineStyle(2, 0xff0000, 0.3);
-                         enemyRadarGraphics.fillStyle(0xff0000, 0.05);
-                         
-                         let startAngle = enemy.rotation - 0.4;
-                         let endAngle = enemy.rotation + 0.4;
-                         
-                         enemyRadarGraphics.beginPath();
-                         enemyRadarGraphics.moveTo(enemy.x, enemy.y);
-                         enemyRadarGraphics.arc(enemy.x, enemy.y, radarRange, startAngle, endAngle);
-                         enemyRadarGraphics.closePath();
-                         enemyRadarGraphics.fillPath();
-                         enemyRadarGraphics.strokePath();
-                         
-                         let fireRate = window.GLOBAL_ENEMY_FIRE_RATE || 2000;
-                         if (!enemy.lastFireTime) enemy.lastFireTime = 0;
-                         
-                         if (this.time.now > enemy.lastFireTime + fireRate) {
-                             let angleToPlayer = Phaser.Math.Angle.Between(enemy.x, enemy.y, player.x, player.y);
-                             let diff = Phaser.Math.Angle.Wrap(angleToPlayer - enemy.rotation);
-                             
-                             if (Math.abs(diff) < 0.4) { 
-                                 enemy.lastFireTime = this.time.now;
-                                 
-                                 let numBullets = 1;
-                                 if (score >= 10) numBullets = 5;
-                                 else if (score >= 9) numBullets = 4;
-                                 else if (score >= 8) numBullets = 3;
-                                 else if (score >= 7) numBullets = 2;
-                                 
-                                 for(let n=0; n<numBullets; n++) {
-                                     let eb = enemyBulletsGroup.create(enemy.x, enemy.y, 'bulletTex');
-                                     if(eb) {
-                                         eb.setTint(0xff0000);
-                                         eb.body.setCircle(4);
-                                         let spread = (n - (numBullets-1)/2) * 0.1;
-                                         let speed = window.GLOBAL_ENEMY_BULLET_SPEED || 400;
-                                         this.physics.velocityFromRotation(angleToPlayer + spread, speed, eb.body.velocity);
-                                         this.time.delayedCall(2000, () => { if(eb.active) eb.destroy(); });
-                                     }
-                                 }
-                                 
-                                 if (score >= 10) {
-                                     // Misil enemigo ocasional
-                                     this.time.delayedCall(200, () => {
-                                         let em = enemyBulletsGroup.create(enemy.x, enemy.y, 'missileTex');
-                                         if(em) {
-                                             em.setTint(0xff00ff);
-                                             this.physics.velocityFromRotation(angleToPlayer, 250, em.body.velocity);
-                                         }
-                                     });
-                                 }
-                             }
-                         }
-                     }
-                 }
-             }
+            // 1. IA DE DISPARO (Solo naves Rojas y score >= 6)
+            if (enemy.texture && enemy.texture.key === 'enemyShieldTex' && score >= 6) {
+                let distToPlayer = Phaser.Math.Distance.Between(enemy.x, enemy.y, player.x, player.y);
+                let radarRange = 250;
+                if (distToPlayer < radarRange) {
+                    let forwardAngle = enemy.rotation - Math.PI/2;
+                    let angleToPlayer = Phaser.Math.Angle.Between(enemy.x, enemy.y, player.x, player.y);
+                    let diff = Phaser.Math.Angle.Wrap(angleToPlayer - forwardAngle);
+                    
+                    enemyRadarGraphics.lineStyle(2, 0xff0000, 0.3);
+                    enemyRadarGraphics.fillStyle(0xff0000, 0.05);
+                    enemyRadarGraphics.beginPath();
+                    enemyRadarGraphics.moveTo(enemy.x, enemy.y);
+                    enemyRadarGraphics.arc(enemy.x, enemy.y, radarRange, forwardAngle - 0.4, forwardAngle + 0.4);
+                    enemyRadarGraphics.closePath();
+                    enemyRadarGraphics.fillPath();
+                    enemyRadarGraphics.strokePath();
+                    
+                    let fireRate = window.GLOBAL_ENEMY_FIRE_RATE || 2000;
+                    if (!enemy.lastFireTime) enemy.lastFireTime = 0;
+                    if (this.time.now > enemy.lastFireTime + fireRate && Math.abs(diff) < 0.4) {
+                        enemy.lastFireTime = this.time.now;
+                        let numBullets = 1;
+                        if (score >= 10) numBullets = 5;
+                        else if (score >= 9) numBullets = 4;
+                        else if (score >= 8) numBullets = 3;
+                        else if (score >= 7) numBullets = 2;
+                        
+                        for(let n=0; n<numBullets; n++) {
+                            let eb = enemyBulletsGroup.create(enemy.x, enemy.y, 'bulletTex');
+                            if(eb) {
+                                eb.setTint(0xff0000); eb.body.setCircle(4);
+                                let spread = (n - (numBullets-1)/2) * 0.1;
+                                let speed = window.GLOBAL_ENEMY_BULLET_SPEED || 400;
+                                this.physics.velocityFromRotation(forwardAngle + spread, speed, eb.body.velocity);
+                                this.time.delayedCall(2000, () => { if(eb.active) eb.destroy(); });
+                            }
+                        }
+                        if (score >= 10) {
+                            this.time.delayedCall(200, () => {
+                                let em = enemyBulletsGroup.create(enemy.x, enemy.y, 'missileTex');
+                                if(em) { em.setTint(0xff00ff); this.physics.velocityFromRotation(forwardAngle, 250, em.body.velocity); this.time.delayedCall(4000, () => { if(em.active) em.destroy(); }); }
+                            });
+                        }
+                    }
+                }
+            }
+
+            // 2. IA DE MOVIMIENTO
+            if (currentGameMode === 1 || currentGameMode === 2) {
+                enemy.rotation += 0.05;
+            } else if (currentGameMode === 3) {
+                if (gameLevel === 1) {
+                    // Nivel 1: Movimiento Aleatorio Inercial (No persiguen, solo rotan)
+                    enemy.rotation += 0.02 * timeDilation;
+                    // Mantienen la velocidad de spawn (rebote automático por Arcade Physics)
+                } else {
+                    // Nivel 2+: Enjambre (Boids)
+                    let anguloJugador = Phaser.Math.Angle.Between(enemy.x, enemy.y, player.x, player.y);
+                    let anguloObjetivo = anguloJugador + Math.PI / 2;
+                    let diffRot = Phaser.Math.Angle.ShortestBetween(Phaser.Math.RadToDeg(enemy.rotation), Phaser.Math.RadToDeg(anguloObjetivo));
+                    enemy.rotation += Phaser.Math.DegToRad(diffRot) * (timeDilation === 1.0 ? 1.0 : 0.05 * timeDilation);
+                    
+                    let speed = 45 * timeDilation;
+                    let vX = Math.cos(anguloJugador) * speed;
+                    let vY = Math.sin(anguloJugador) * speed;
+                    
+                    enemiesGroup.getChildren().forEach(otro => {
+                        if (otro !== enemy && otro.active) {
+                            let dx = enemy.x - otro.x; let dy = enemy.y - otro.y; let dist2 = dx*dx + dy*dy;
+                            if (dist2 > 0 && dist2 < 2500) { 
+                                let distReal = Math.sqrt(dist2);
+                                let panico = (50 - distReal) * 2 * timeDilation;
+                                vX += (dx / distReal) * panico; vY += (dy / distReal) * panico;
+                            }
+                        }
+                    });
+                    enemy.body.setVelocity(vX, vY);
+                }
+            }
         }
     }, this);
 
@@ -983,16 +966,16 @@ function hitAnswerCoin(player, coin) {
         });
         
         // CONTROL DE PROGRESIÓN MODO 3
-        if (currentGameMode === 3 && score % 15 === 0 && score > 0) {
+        if (currentGameMode === 3 && score % 5 === 0 && score > 0) {
              gameLevel = 2;
-             let lvlText = this.add.text(config.width/2, config.height/2, "¡RANGO ALCANZADO!\nNIVEL AUMENTADO", { fontSize: '40px', fill: '#00FFFF', align: 'center', fontStyle: 'bold', stroke: '#000', strokeThickness: 6 });
+             let lvlText = this.add.text(config.width/2, config.height/2, "¡RANGO ALCANZADO!\nENJAMBRE ACTIVADO", { fontSize: '40px', fill: '#00FFFF', align: 'center', fontStyle: 'bold', stroke: '#000', strokeThickness: 6 });
              lvlText.setOrigin(0.5);
              this.tweens.add({ targets: lvlText, scale: 1.5, alpha: 0, duration: 3000, ease: 'Power1', hold: 1000, yoyo: true, onComplete: () => lvlText.destroy() });
              
              this.updateSingularityUI(); 
              
              enemiesGroup.getChildren().forEach(e => {
-                  e.setTint(0xff0000);
+                  if(e.texture && e.texture.key === 'enemyShieldTex') e.setTint(0xff0000);
              });
         }
         
