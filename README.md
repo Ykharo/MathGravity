@@ -1,27 +1,46 @@
-# Math Gravity Arcade 🚀
+# Math Gravity Arcade
 
-**Versión:** 1.0 (Iteration Nivel 2 y PWA Offline)
-**Motor:** Phaser 3.60 (Minimalista/Memoria Vectorial)
+Bienvenido al código fuente de Math Gravity Arcade. Este documento describe la arquitectura y la lógica fundamental actual del juego.
 
-## Objetivo Core del Juego
-Math Gravity Arcade no es un simple test de matemáticas escolares. Es una **supervivencia hiper-vectorial dinámica**. Tienes un barco sometido a inercia real (gravedad flotante, aceleración matemática). Pierdes el control muy fácil. Para ganar armas (escudos, control temporal), debes resolver multiplicaciones cazando bloques erráticos.
+## Arquitectura del Motor
+El juego está construido sobre **Phaser 3** utilizando únicamente su sistema de físicas (Arcade Physics), geometría dinámica (`Phaser.Graphics`) en lugar de sprites estáticos pesados, y un flujo de eventos continuo (`update`). 
+Es una **PWA** (Progressive Web App) completamente offline con un Service Worker integrado (`sw.js`).
 
-Mientras la nave es asediada, todo se maneja en un espacio pseudo-físico: 
-- Nivel 1: Naves rojas tontas con inercia aleatoria.
-- Nivel 2 (Score 10+): Modo "Cazadores Oscuros". Comportamiento Enjambre (Swarm/Boids) acosador.
+## Lógica de Juego y Estados Matemáticos
+El juego no usa escenas múltiples; la progresión ocurre en tiempo real y fluye entre dos estados lógicos (`currentPhase`):
 
-## Mecánicas Técnicas / Hacks del Protagonista
+1. **`WAITING_BLOCK`**:
+   - Aparecen bloques matemáticos flotando en la parte superior.
+   - La nave debe chocar contra uno para seleccionarlo ("Aceptar la misión").
+   - **Algoritmo de Generación**: 
+     - Mantiene un estricto control "Anti-Clonación". Verifica que no aparezcan dos bloques con el mismo resultado en pantalla (para que las opciones de respuesta no colisionen).
+     - Prioriza el registro histórico: si el usuario ha fallado previamente (registrado en `failedMath`), existe un 40% de probabilidad de forzar una de esas multiplicaciones erradas.
+     - Si la salud está por debajo de 75%, hay probabilidad de generar un bloque "HEAL" (verde).
+     - Hay pequeña probabilidad de generar bloque "SHIELD" (neón celeste).
 
-### 1. Motor de Vuelo (Auto-Pilot & Lerp)
-A diferencia de un control direccional estricto, el jugador pulsa la pantalla y la nave sufre un evento `moveToObject` elástico. Existe un modo "Auto-Piloto Evasivo" (`GLOBAL_AUTOPILOT`) que permite al jugador enfocarse solo en pensar en matemáticas, delegando el manejo a un radar verde evasivo. (El auto-piloto se vuelve Kamikaze si posee un escudo y ataca enemigos).
+2. **`WAITING_ANSWER`**:
+   - Al colisionar con el bloque, el resto de los bloques se vuelve transparente.
+   - Se generan monedas/asteroides con diferentes números, rebotando aleatoriamente en el mapa. Una de ellas contiene la respuesta matemática correcta, y las otras contienen engaños (+/- 1, 2, 5, etc).
+   - **Respuesta Correcta**: 
+     - La moneda se vuelve verde.
+     - Sube el Score, se aplican curaciones o escudos (si aplica).
+     - Nace un enemigo nuevo.
+     - La escena se limpia y vuelve a `WAITING_BLOCK`.
+   - **Respuesta Incorrecta**:
+     - Fuerte rebote físico (rechazo).
+     - La moneda errada se destruye.
+     - El jugador pierde 20% de HP.
+     - Nace un enemigo nuevo por penalidad.
+     - Se anota el error en la lista `failedMath` para ser priorizado en futuros bloques.
 
-### 2. Antivirus de Clonación (Filtro nivel 5)
-Para evitar que se repita por casualidad la misma respuesta en pantalla (causando choques caóticos), se impuso una cola histórica. Si luego de 5 tiradas aleatorias sigue generando el mismo número repetitivo, el "cortafuego" se quita y escupe 2 números totalmente aleatorios para romper el ciclo infinito de Phaser mathRandom.
+## Sistema de Físicas y Autopiloto
+El juego simula "gravedad cero" e inercia espacial:
+- **Movimiento**: Arrastre controlado (`drag`) y aceleración angular (la nave "dobla" hacia donde el ratón/dedo apunta).
+- **Auto-Piloto**: Calcula un vector de atracción al objetivo (puntero) y un vector de repulsión drástico (evasión algorítmica) de los enemigos cercanos. Si el jugador tiene el escudo activo, la evasión se invierte y el autopiloto se vuelve un modo *Kamikaze* magnético hacia el enemigo para destruirlo.
 
-### 3. La Singularidad (Núcleo Temporal - Nivel 2)
-Al alcanzar el Nivel 2, cazar 3 respuestas carga un arma de gelatina espacial. Al pulsar el botón "LAB/SINGULARIDAD", el fondo se torna Gris. Todas las físicas enemigas, paredes giratorias e inercias bajan a 0.05 por **20 segundos de gracia divina**, convirtiendo a las naves acosadoras en tortugas estupefactas para despejar la pantalla.
-
-## Entorno Técnico y Bugs Arreglados por la IA:
-*   **Empaquetado iOS Offline:** El juego soporta Safari PWA Standalone. Generé Service Worker (`sw.js`).
-*   **Vector a AppIcon:** iOS no soporta `.svg`, se debatió este bug recurrente y se migró el Apple-Touch-Icon a `.png` forzosamente en terminal para resolverlo.
-*   **Bug de las Letras Góticas de Apple (Fallback cursive):** El iPhone/iPad caía en la trampa tipográfica de interpretar `cursive` como Script Antiguo. Se neutralizó permanentemente en `game.js` pasando la topografía a `Arial, sans-serif` plana.
+## Dificultad Dinámica (Progresión)
+1. **Nivel 1 (0-9 Puntos)**: Los enemigos giran sobre su propio eje y tienen velocidades aleatorias simples.
+2. **Nivel 2 (10+ Puntos)**: 
+   - Los enemigos cambian a color rojo oscuro.
+   - Adquieren el comportamiento **Swarm/Boids** (Enjambre): Se agrupan, mantienen separación entre ellos y persiguen agresivamente al jugador como un banco de peces letal.
+   - Se desbloquea el arma de **Singularidad Temporal** (ralentiza el tiempo de los enemigos a un 5% simulando una hiper-densidad gravitatoria).

@@ -56,6 +56,12 @@ let isGamePaused = false;
 // Estados matemáticos
 let currentPhase = "WAITING_BLOCK"; // "WAITING_BLOCK" o "WAITING_ANSWER"
 
+// Modos de Juego y Progreso
+let currentGameMode = 0; // 0=Menu, 1=Secuencial, 2=Aleatorio Tabla, 3=Survival
+let currentTableIndex = 0;
+let currentStep = 1;
+let pendingTableSteps = [];
+
 // Variables para el rastro y movimiento fluido
 let targetX = 0;
 let targetY = 0;
@@ -129,6 +135,45 @@ function create() {
         }
     };
 
+    this.startGameMode = (mode) => {
+        currentGameMode = mode;
+        currentTableIndex = 0;
+        currentStep = 1;
+        pendingTableSteps = [1,2,3,4,5,6,7,8,9,10];
+        
+        score = 0;
+        gameLevel = 1;
+        playerHealth = 100;
+        healthBarText.setText(obtenerVidaSegmentada(playerHealth));
+        document.getElementById('score').innerText = score;
+        
+        player.setPosition(this.cameras.main.centerX, this.cameras.main.centerY + 150);
+        player.setVelocity(0,0);
+        
+        enemiesGroup.clear(true, true);
+        answersGroup.getChildren().forEach(c => { if(c.linkedText) c.linkedText.destroy(); });
+        answersGroup.clear(true, true);
+        mathBlocksGroup.getChildren().forEach(b => { if(b.linkedText) b.linkedText.destroy(); });
+        mathBlocksGroup.clear(true, true);
+        
+        currentPhase = "WAITING_BLOCK";
+        isGamePaused = false;
+        isGameOver = false;
+        
+        spawnMathBlocks(this);
+    };
+
+    this.returnToMenu = () => {
+        currentGameMode = 0;
+        mathBlocksGroup.getChildren().forEach(b => { if(b.linkedText) b.linkedText.destroy(); });
+        mathBlocksGroup.clear(true, true);
+        mathTextsGroup.clear(true, true);
+        enemiesGroup.clear(true, true);
+        answersGroup.getChildren().forEach(c => { if(c.linkedText) c.linkedText.destroy(); });
+        answersGroup.clear(true, true);
+        isGamePaused = true;
+    };
+
     // Resetear variables en caso de reinicio
     score = 0;
     isGameOver = false;
@@ -193,7 +238,7 @@ function create() {
         immovable: true // Para que la nave rebote si es falso
     });
     
-    spawnMathBlocks(this); // Generar los bloques top (las 3 o 4 cajas)
+    // spawnMathBlocks(this); // Ahora se invoca desde startGameMode()
 
     // 7. Colisiones y Físicas Generales
     this.physics.add.collider(player, enemiesGroup, hitEnemy, null, this);
@@ -403,7 +448,7 @@ function update() {
 
 /** Funciones Lógicas del Juego **/
 
-function spawnSingleMathBlock(scene, i) {
+function spawnSingleMathBlock(scene, i, forcedA = null, forcedB = null) {
     let blockWidth = 120;
     let blockHeight = 50;
     let spacing = config.width / 4;
@@ -430,35 +475,40 @@ function spawnSingleMathBlock(scene, i) {
     let fallbackPuroAleatorio = false; // Bandera de rescate numérico
     let abortSafety = 0;
     
-    // Algoritmo anti-clonación riguroso
-    while (!resolucionInedita) {
-        abortSafety++;
-        if (abortSafety > 5) fallbackPuroAleatorio = true; // Demasiados rechazos: la lista fallida es un loop tóxico. Fallback a crudos!
-        
-        if (!fallbackPuroAleatorio && ((failedMath.length > 0 && Math.random() < 0.4) || blockType !== "NORMAL")) {
-             let focusList = failedMath.length > 0 ? failedMath : [ {a:7,b:8}, {a:6,b:9}, {a:8,b:8}, {a:9,b:7} ]; 
-             let rep = Phaser.Utils.Array.GetRandom(focusList);
-             factorA = rep.a;
-             factorB = rep.b;
-        } else {
-             // Forzar creación desde cero
-             factorA = Phaser.Math.Between(1, 10);
-             factorB = Phaser.Math.Between(1, 10);
-        }
-        
-        let resultadoPropuesto = factorA * factorB;
-        let esDuplicadoEnTablero = false;
-        
-        if(typeof mathBlocksGroup !== 'undefined' && mathBlocksGroup.getChildren().length > 0) {
-             mathBlocksGroup.getChildren().forEach(b => {
-                 if (b && b.mathData && b.mathData.result === resultadoPropuesto) {
-                     esDuplicadoEnTablero = true;
-                 }
-             });
-        }
-        
-        if (!esDuplicadoEnTablero || abortSafety >= 50) { // Safety escape absoluto para prevenir crasheo web
-            resolucionInedita = true;
+    if (forcedA !== null && forcedB !== null) {
+        factorA = forcedA;
+        factorB = forcedB;
+    } else {
+        // Algoritmo anti-clonación riguroso
+        while (!resolucionInedita) {
+            abortSafety++;
+            if (abortSafety > 5) fallbackPuroAleatorio = true; // Demasiados rechazos: la lista fallida es un loop tóxico. Fallback a crudos!
+            
+            if (!fallbackPuroAleatorio && ((failedMath.length > 0 && Math.random() < 0.4) || blockType !== "NORMAL")) {
+                 let focusList = failedMath.length > 0 ? failedMath : [ {a:7,b:8}, {a:6,b:9}, {a:8,b:8}, {a:9,b:7} ]; 
+                 let rep = Phaser.Utils.Array.GetRandom(focusList);
+                 factorA = rep.a;
+                 factorB = rep.b;
+            } else {
+                 // Forzar creación desde cero usando Tablas Válidas
+                 factorA = Phaser.Utils.Array.GetRandom(window.GLOBAL_VALID_TABLES);
+                 factorB = Phaser.Math.Between(1, 10);
+            }
+            
+            let resultadoPropuesto = factorA * factorB;
+            let esDuplicadoEnTablero = false;
+            
+            if(typeof mathBlocksGroup !== 'undefined' && mathBlocksGroup.getChildren().length > 0) {
+                 mathBlocksGroup.getChildren().forEach(b => {
+                     if (b && b.mathData && b.mathData.result === resultadoPropuesto) {
+                         esDuplicadoEnTablero = true;
+                     }
+                 });
+            }
+            
+            if (!esDuplicadoEnTablero || abortSafety >= 50) { // Safety escape absoluto para prevenir crasheo web
+                resolucionInedita = true;
+            }
         }
     }
     
@@ -482,10 +532,27 @@ function spawnSingleMathBlock(scene, i) {
 }
 
 function spawnMathBlocks(scene) {
+    if (currentGameMode === 0) return;
     mathBlocksGroup.clear(true, true);
     mathTextsGroup.clear(true, true);
-    for (let i = 0; i < 4; i++) {
-        spawnSingleMathBlock(scene, i);
+    
+    if (currentGameMode === 1) {
+        let fA = window.GLOBAL_VALID_TABLES[currentTableIndex];
+        let fB = currentStep;
+        spawnSingleMathBlock(scene, 1.5, fA, fB);
+    } else if (currentGameMode === 2) {
+        let fA = window.GLOBAL_VALID_TABLES[currentTableIndex];
+        let maxSpawn = Math.min(4, pendingTableSteps.length);
+        let shuffledSteps = Phaser.Utils.Array.Shuffle([...pendingTableSteps]);
+        let selectedSteps = shuffledSteps.slice(0, maxSpawn);
+        for (let i = 0; i < maxSpawn; i++) {
+            let posIndex = maxSpawn === 1 ? 1.5 : (maxSpawn === 2 ? 1 + i : (maxSpawn === 3 ? 0.5 + i : i));
+            spawnSingleMathBlock(scene, posIndex, fA, selectedSteps[i]);
+        }
+    } else if (currentGameMode === 3) {
+        for (let i = 0; i < 4; i++) {
+            spawnSingleMathBlock(scene, i);
+        }
     }
 }
 
@@ -574,23 +641,52 @@ function hitAnswerCoin(player, coin) {
              });
         }
         
+        // Control de Progreso Modos 1 y 2
+        if (currentGameMode === 1) {
+             currentStep++;
+             if (currentStep > 10) {
+                 currentStep = 1;
+                 currentTableIndex++;
+                 if (currentTableIndex >= window.GLOBAL_VALID_TABLES.length) {
+                     alert("¡Modo Secuencial Completado!");
+                     window.returnToMenu();
+                     return;
+                 }
+             }
+        } else if (currentGameMode === 2) {
+             pendingTableSteps = pendingTableSteps.filter(s => s !== activeProblem.b);
+             if (pendingTableSteps.length === 0) {
+                 currentTableIndex++;
+                 pendingTableSteps = [1,2,3,4,5,6,7,8,9,10];
+                 if (currentTableIndex >= window.GLOBAL_VALID_TABLES.length) {
+                     alert("¡Modo Aleatorio por Tabla Completado!");
+                     window.returnToMenu();
+                     return;
+                 }
+             }
+        }
+
         // Limpiar fase matematicas
         answersGroup.getChildren().forEach(c => { if(c.linkedText) c.linkedText.destroy(); });
         answersGroup.clear(true, true);
         
-        let targetIndex = activeProblem.index;
-        if(activeProblem.blockRef) {
-             if(activeProblem.blockRef.linkedText) activeProblem.blockRef.linkedText.destroy();
-             activeProblem.blockRef.destroy();
+        if (currentGameMode === 3) {
+            let targetIndex = activeProblem.index;
+            if(activeProblem.blockRef) {
+                 if(activeProblem.blockRef.linkedText) activeProblem.blockRef.linkedText.destroy();
+                 activeProblem.blockRef.destroy();
+            }
+            
+            spawnSingleMathBlock(this, targetIndex);
+            
+            // Restaurar estado
+            mathBlocksGroup.getChildren().forEach(b => { 
+                 b.setAlpha(1); b.clearTint(); 
+                 if(b.linkedText) b.linkedText.setAlpha(1);
+            });
+        } else {
+            spawnMathBlocks(this);
         }
-        
-        spawnSingleMathBlock(this, targetIndex);
-        
-        // Restaurar estado
-        mathBlocksGroup.getChildren().forEach(b => { 
-             b.setAlpha(1); b.clearTint(); 
-             if(b.linkedText) b.linkedText.setAlpha(1);
-        });
         
         currentPhase = "WAITING_BLOCK";
 
