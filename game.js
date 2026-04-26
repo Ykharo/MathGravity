@@ -356,8 +356,9 @@ function update() {
     let rotAmount = 0.003 * timeDilation;
     globalRingRotation += rotAmount;
     
-    let currentRadius = config.width * (window.GLOBAL_RING_RADIUS_PCT !== undefined ? window.GLOBAL_RING_RADIUS_PCT : 0.35);
-    Phaser.Actions.RotateAroundDistance(ringGroup.getChildren(), { x: config.width / 2, y: config.height / 2 }, rotAmount, currentRadius);
+    let currentRadius = config.width * (window.GLOBAL_RING_RADIUS_PCT !== undefined ? window.GLOBAL_RING_RADIUS_PCT : 0.25);
+    let centerY = config.height / 2 + (currentRadius * 0.25); // Offset hacia abajo un cuarto de radio
+    Phaser.Actions.RotateAroundDistance(ringGroup.getChildren(), { x: config.width / 2, y: centerY }, rotAmount, currentRadius);
     
     if (window.GLOBAL_RING_VISIBLE !== undefined && ringGroup.visible !== window.GLOBAL_RING_VISIBLE) {
         ringGroup.setVisible(window.GLOBAL_RING_VISIBLE);
@@ -368,7 +369,7 @@ function update() {
         window.centralRingGraphic.clear();
         if (window.GLOBAL_RING_VISIBLE !== false) {
             window.centralRingGraphic.lineStyle(1, 0xD84315, 0.4); 
-            window.centralRingGraphic.strokeCircle(config.width/2, config.height/2, currentRadius);
+            window.centralRingGraphic.strokeCircle(config.width/2, centerY, currentRadius);
         }
     }
 
@@ -929,8 +930,10 @@ function spawnAnswerCoins(scene, prob) {
 }
 
 function spawnSinglePearl(scene, rad, radius, arcoGrozor) {
+     let currentRadius = config.width * (window.GLOBAL_RING_RADIUS_PCT !== undefined ? window.GLOBAL_RING_RADIUS_PCT : 0.25);
+     let centerY = config.height / 2 + (currentRadius * 0.25);
      let px = config.width / 2 + Math.cos(rad) * radius;
-     let py = config.height / 2 + Math.sin(rad) * radius;
+     let py = centerY + Math.sin(rad) * radius;
      
      let perla = ringGroup.create(px, py, 'perlaTex');
      perla.setOrigin(0.5);
@@ -1183,9 +1186,11 @@ function hitRing(player, ringSegment) {
 }
 
 function dibujarAnilloCentral(scene) {
+    let currentRadius = config.width * (window.GLOBAL_RING_RADIUS_PCT !== undefined ? window.GLOBAL_RING_RADIUS_PCT : 0.25);
+    let centerY = config.height / 2 + (currentRadius * 0.25);
     window.centralRingGraphic = scene.add.graphics();
     window.centralRingGraphic.lineStyle(1, 0xD84315, 0.4); 
-    window.centralRingGraphic.strokeCircle(config.width/2, config.height/2, config.width * 0.35);
+    window.centralRingGraphic.strokeCircle(config.width/2, centerY, currentRadius);
 }
 
 function dibujarYCrearParedesAnillo(scene) {
