@@ -59,6 +59,18 @@ let currentPhase = "WAITING_BLOCK"; // "WAITING_BLOCK" o "WAITING_ANSWER"
 // Modos de Juego y Progreso
 let currentGameMode = 0; // 0=Menu, 1=Secuencial, 2=Aleatorio Tabla, 3=Survival
 
+// --- Armas y Combate (Modo 3) ---
+let bulletsGroup;
+let missilesGroup;
+let radarGraphics = null;
+let currentCannonAmmo = 0;
+let currentMissileAmmo = 0;
+let lastFireTime = 0;
+let isRadarLocked = false;
+
+// Ancho dinámico del juego
+let currentGameWidth = window.innerWidth > 600 ? 600 : window.innerWidth;
+
 // --- AUDIO SYSTEM (Oscillators & TTS) ---
 function playTone(freq, type, duration) {
     if (!window.GLOBAL_AUDIO_CTX) return;
@@ -295,6 +307,15 @@ function create() {
     // 7. Colisiones y Físicas Generales
     this.physics.add.collider(player, enemiesGroup, hitEnemy, null, this);
     
+    // Armas (Modo 3)
+    bulletsGroup = this.physics.add.group({ defaultKey: 'bulletTex', maxSize: 50 });
+    missilesGroup = this.physics.add.group({ defaultKey: 'missileTex', maxSize: 50 });
+    radarGraphics = this.add.graphics();
+    radarGraphics.setDepth(5);
+    
+    this.physics.add.overlap(bulletsGroup, enemiesGroup, hitEnemyWithWeapon, null, this);
+    this.physics.add.overlap(missilesGroup, enemiesGroup, hitEnemyWithWeapon, null, this);
+    
     // Ignorar por completo la colisión física si el usuario apagó el muro en el Lab
     this.physics.add.collider(player, ringGroup, null, () => window.GLOBAL_RING_VISIBLE !== false, this);
     this.physics.add.collider(enemiesGroup, ringGroup, null, () => window.GLOBAL_RING_VISIBLE !== false, this);
@@ -356,6 +377,17 @@ function update() {
     let rotAmount = 0.003 * timeDilation;
     globalRingRotation += rotAmount;
     
+    // Ajuste dinámico del ancho del juego desde Lab
+    if (window.GLOBAL_GAME_WIDTH !== undefined && window.GLOBAL_GAME_WIDTH !== currentGameWidth) {
+        currentGameWidth = window.GLOBAL_GAME_WIDTH;
+        config.width = currentGameWidth; 
+        this.scale.resize(currentGameWidth, config.height);
+        this.physics.world.setBounds(0, 0, currentGameWidth, config.height);
+        
+        // Reposicionar UI estática si existe
+        if (healthBarText) healthBarText.setX(config.width - 20);
+    }
+    
     let currentRadius = config.width * (window.GLOBAL_RING_RADIUS_PCT !== undefined ? window.GLOBAL_RING_RADIUS_PCT : 0.25);
     let centerY = config.height / 2 + (currentRadius * 0.25); // Offset hacia abajo un cuarto de radio
     Phaser.Actions.RotateAroundDistance(ringGroup.getChildren(), { x: config.width / 2, y: centerY }, rotAmount, currentRadius);
@@ -382,6 +414,81 @@ function update() {
     let anguloVisual = player.rotation - Math.PI / 2; 
     let engX = Math.cos(anguloVisual) * engineForce;
     let engY = Math.sin(anguloVisual) * engineForce;
+    
+    // --- LÓGICA DE RADAR Y ARMAS (Modo 3) ---
+    isRadarLocked = false;
+    let nearestEnemyForCannon = null;
+    let nearestEnemyDistCannon = window.GLOBAL_RADAR_RADIUS || 300;
+    
+    // Escudo automático de emergencia (Nivel 10+)
+    if (currentGameMode === 3 && score >= 10 && !hasShield) {
+        enemiesGroup.getChildren().forEach(enemy => {
+            if (enemy.active) {
+                let dist = Phaser.Math.Distance.Between(player.x, player.y, enemy.x, enemy.y);
+                if (dist < 80) { // Amenaza inminente
+                    hasShield = true;
+                    shieldTimer = 5000;
+                }
+            }
+        });
+    }
+
+    if (currentGameMode === 3) {
+        // Escaneo global para misiles
+        if (score >= 8 && currentMissileAmmo > 0) {
+            enemiesGroup.getChildren().forEach(enemy => {
+                if (enemy.active) {
+                    let dist = Phaser.Math.Distance.Between(player.x, player.y, enemy.x, enemy.y);
+                    if (dist < (window.GLOBAL_RADAR_RADIUS || 300) * 1.5) {
+                        fireMissiles(this, enemy);
+                    }
+                }
+            });
+        }
+
+        if (score >= 5 && currentCannonAmmo > 0) {
+            enemiesGroup.getChildren().forEach(enemy => {
+                if (enemy.active) {
+                    let dist = Phaser.Math.Distance.Between(player.x, player.y, enemy.x, enemy.y);
+                    if (dist < nearestEnemyDistCannon) {
+                        nearestEnemyDistCannon = dist;
+                        nearestEnemyForCannon = enemy;
+                    }
+                }
+            });
+            
+            radarGraphics.clear();
+            if (nearestEnemyForCannon) {
+                radarGraphics.lineStyle(1, 0x00FF00, Math.abs(Math.sin(this.time.now / 150)) * 0.5); // Parpadeo más tenue
+                radarGraphics.fillStyle(0x00FF00, 0.05); // Más transparente
+                
+                let radarAngleSpan = Math.PI / 6; // Cono
+                radarGraphics.beginPath();
+                radarGraphics.moveTo(player.x, player.y);
+                radarGraphics.arc(player.x, player.y, window.GLOBAL_RADAR_RADIUS || 300, player.rotation - Math.PI/2 - radarAngleSpan, player.rotation - Math.PI/2 + radarAngleSpan);
+                radarGraphics.closePath();
+                radarGraphics.fillPath();
+                radarGraphics.strokePath();
+            }
+
+            // Apuntar y disparar
+            if (nearestEnemyForCannon) {
+                isRadarLocked = true; // PAUSA EVASIVA Y AERODINAMICA
+                let targetAngle = Phaser.Math.Angle.Between(player.x, player.y, nearestEnemyForCannon.x, nearestEnemyForCannon.y);
+                let diff = Phaser.Math.Angle.ShortestBetween(Phaser.Math.RadToDeg(player.rotation), Phaser.Math.RadToDeg(targetAngle) + 90);
+                
+                player.rotation += Phaser.Math.DegToRad(diff) * 0.15; // Girar suavemente hacia el enemigo
+                
+                if (Math.abs(diff) < 10) { // Bloqueado
+                    radarGraphics.lineStyle(4, 0xFF0000, 1);
+                    radarGraphics.strokeCircle(nearestEnemyForCannon.x, nearestEnemyForCannon.y, 20);
+                    fireCannons(this);
+                }
+            }
+        } else {
+            if(radarGraphics) radarGraphics.clear();
+        }
+    }
     
     if (window.GLOBAL_AUTOPILOT) {
         // Sonar Visual (Emite un pulso verde circular cada medio segundo)
@@ -476,7 +583,7 @@ function update() {
     }
 
     // MAGIA AERODINÁMICA: La nave apunta SIEMPRE alineada a su trayectoria de velocidad, curvando natural y orgánicamente
-    if (player.body.velocity.lengthSq() > 2) { 
+    if (!isRadarLocked && player.body.velocity.lengthSq() > 2) { 
         player.rotation = player.body.velocity.angle() + Math.PI / 2;
     }
 
@@ -539,6 +646,32 @@ function update() {
              }
         }
     });
+
+    // Misiles Homing Update
+    if (typeof missilesGroup !== 'undefined') {
+        missilesGroup.getChildren().forEach(missile => {
+            if (missile.active && missile.target && missile.target.active) {
+                let mSpeed = window.GLOBAL_MISSILE_SPEED || 400;
+                let mTurn = window.GLOBAL_MISSILE_TURN || 0.1;
+                
+                let angleToTarget = Phaser.Math.Angle.Between(missile.x, missile.y, missile.target.x, missile.target.y);
+                
+                // Efecto Zig-Zag
+                let zigzag = Math.sin((this.time.now - missile.birthTime) * 0.01 + missile.randomOffset) * 0.5; 
+                angleToTarget += zigzag;
+                
+                let diff = Phaser.Math.Angle.ShortestBetween(Phaser.Math.RadToDeg(missile.rotation), Phaser.Math.RadToDeg(angleToTarget));
+                missile.rotation += Phaser.Math.DegToRad(diff) * mTurn;
+                
+                missile.body.setVelocity(
+                    Math.cos(missile.rotation) * mSpeed,
+                    Math.sin(missile.rotation) * mSpeed
+                );
+            } else if (missile.active) {
+                missile.body.setAcceleration(0,0);
+            }
+        });
+    }
 
     // Animación visual del anillo central o decoraciones se haría aquí
 }
@@ -717,6 +850,13 @@ function hitAnswerCoin(player, coin) {
         score += 1;
         document.getElementById('score').innerText = score;
         
+        // Recarga Munición en Modo 3
+        if (currentGameMode === 3) {
+            currentCannonAmmo = window.GLOBAL_CANNON_AMMO || 4;
+            currentMissileAmmo = window.GLOBAL_MISSILE_AMMO || 2;
+            updateShipTint();
+        }
+        
         if (gameLevel >= 2) {
             singularityCharges++;
             this.updateSingularityUI();
@@ -736,6 +876,19 @@ function hitAnswerCoin(player, coin) {
         }
         
         spawnEnemy(this); // Ganas = Nace enemigo
+        
+        if (currentGameMode === 3) {
+            if (score >= 6) {
+                spawnEnemy(this);
+                spawnEnemy(this);
+                spawnEnemy(this);
+                spawnEnemy(this);
+            } else if (score >= 5) {
+                spawnEnemy(this);
+                spawnEnemy(this);
+            }
+        }
+        
         if (score % 2 === 0) { spawnWall(this); } 
         
         // Explosion verde de victoria
@@ -998,11 +1151,24 @@ function createCustomTextures(scene) {
     graphics.fillTriangle(15, 0, 30, 36, 0, 36);
     graphics.generateTexture('playerTex', 30, 36);
     graphics.clear();
+    
+    // Textura Bala (Pequeño círculo celeste)
+    graphics.fillStyle(0x00FFFF, 1);
+    graphics.fillCircle(4, 4, 4);
+    graphics.generateTexture('bulletTex', 8, 8);
+    graphics.clear();
 
     // Textura Enemigo (Triángulo Oscuro correlativo)
     graphics.fillStyle(0x333333, 1);
     graphics.fillTriangle(15, 0, 30, 36, 0, 36);
     graphics.generateTexture('enemyTex', 30, 36);
+    graphics.clear();
+
+    // Textura Misil (Pequeño rombo/cruz)
+    graphics.fillStyle(0xFF00FF, 1);
+    graphics.fillRect(0, 4, 12, 4);
+    graphics.fillRect(4, 0, 4, 12);
+    graphics.generateTexture('missileTex', 12, 12);
     graphics.clear();
 
     // Texturas de Cajas de Matemática (Naranja, Verde, Neon) más grandes
@@ -1058,8 +1224,19 @@ function spawnEnemy(scene) {
     // Restablecido a 1 para evitar loop infinito de colisiones exponenciales
     enemy.body.setBounce(1, 1); 
     
-    // Si estamos en nivel 2 avanzardo, nacen ya furiosos
-    if (gameLevel === 2) {
+    // Asignación de Puntos de Vida y Escudo
+    enemy.hp = 1;
+    enemy.setTint(0x000000); // Negro por defecto
+    
+    if (currentGameMode === 3 && score >= 3) {
+        if (Math.random() < 0.25) { // 25% de probabilidad de tener escudo
+            enemy.hp = 3;
+            enemy.setTint(0xFF0000); // Rojo Fuerte (Escudo Maximo)
+        }
+    }
+    
+    // Si estamos en nivel 2 avanzardo y no tienen escudo, nacen furiosos
+    if (gameLevel === 2 && enemy.hp === 1) {
         enemy.setTint(0xff0000);
     }
     
@@ -1106,6 +1283,57 @@ function takeDamage(scene, amount) {
     if (playerHealth <= 0) {
         triggerGameOver(scene);
     }
+}
+
+function updateShipTint() {
+    if (currentGameMode === 3 && currentCannonAmmo > 0) {
+        let maxAmmo = window.GLOBAL_CANNON_AMMO || 4;
+        let ratio = currentCannonAmmo / maxAmmo;
+        // Celeste = R variable, G y B full
+        let r = Math.floor(255 - (255 * ratio));
+        let hexColor = (r << 16) | (255 << 8) | 255;
+        player.setTint(hexColor);
+    } else {
+        player.clearTint();
+    }
+}
+
+function hitEnemyWithWeapon(weapon, enemy) {
+    if (!enemy.active || !weapon.active) return;
+    
+    let damage = (weapon.texture && weapon.texture.key === 'missileTex') ? 3 : 1;
+    enemy.hp -= damage;
+    
+    // Destruir rastro de forma segura sin llamar funciones inexistentes
+    if (weapon.trail) {
+        weapon.trail.destroy();
+    }
+    weapon.destroy();
+    
+    if (enemy.hp > 0) {
+        // El escudo resistió el impacto
+        playTone(400, 'triangle', 0.1); // Sonido de impacto a escudo
+        
+        // Efecto visual del campo de fuerza
+        let hitRing = weapon.scene.add.circle(enemy.x, enemy.y, 20);
+        hitRing.setStrokeStyle(3, 0xff0000, 1);
+        weapon.scene.tweens.add({ 
+            targets: hitRing, scale: 2, alpha: 0, duration: 300, 
+            onComplete: () => { hitRing.destroy(); }
+        });
+        
+        // Degradar color de escudo
+        if (enemy.hp === 2) enemy.setTint(0x770000); // Rojo Oscuro
+        else enemy.setTint(0x000000); // Escudo roto, negro
+        
+        return; // No destruir enemigo aún
+    }
+    
+    // Golpe fatal
+    playExplosion();
+    let ring = weapon.scene.add.circle(enemy.x, enemy.y, 10, 0xff0000);
+    weapon.scene.tweens.add({ targets: ring, scale: 3, alpha: 0, duration: 200, onComplete: () => { ring.destroy(); }});
+    enemy.destroy();
 }
 
 function hitEnemy(player, enemy) {
@@ -1219,6 +1447,83 @@ function dibujarYCrearParedesAnillo(scene) {
         for (let j = 0; j < numPerlasBase; j++) {
              let rad = baseAngle + (j * perlaPaso);
              spawnSinglePearl(scene, rad, radius, arcoGrozor);
+        }
+    }
+}
+
+function fireCannons(scene) {
+    if (currentCannonAmmo <= 0) return;
+    if (scene.time.now < lastFireTime + 500) return; // Limite de fuego (rate)
+    
+    // Consumir municion comun
+    currentCannonAmmo--;
+    updateShipTint();
+    lastFireTime = scene.time.now;
+    playTone(800, 'square', 0.1);
+    
+    let bulletSpeed = window.GLOBAL_BULLET_SPEED || 800;
+    let cannonOffsets = [];
+    
+    if (score >= 8) cannonOffsets = [0, -15, 15, -30, 30]; // 5 cañones
+    else if (score >= 7) cannonOffsets = [-10, 10, -25, 25]; // 4 cañones
+    else if (score >= 6) cannonOffsets = [-15, 15]; // 2 cañones
+    else if (score >= 5) cannonOffsets = [0]; // 1 cañon
+    
+    let baseAngle = player.rotation - Math.PI / 2;
+    
+    for (let offset of cannonOffsets) {
+        let ox = Math.cos(baseAngle + Math.PI/2) * offset;
+        let oy = Math.sin(baseAngle + Math.PI/2) * offset;
+        let bx = player.x + Math.cos(baseAngle) * 20 + ox;
+        let by = player.y + Math.sin(baseAngle) * 20 + oy;
+        
+        let bullet = bulletsGroup.create(bx, by, 'bulletTex');
+        if (bullet) {
+            bullet.body.setCircle(4);
+            bullet.setVelocity(Math.cos(baseAngle) * bulletSpeed, Math.sin(baseAngle) * bulletSpeed);
+            scene.time.delayedCall(2000, () => {
+                if (bullet.active) bullet.destroy();
+            });
+        }
+    }
+}
+
+let lastMissileTime = 0;
+function fireMissiles(scene, target) {
+    if (currentMissileAmmo <= 0) return;
+    if (scene.time.now < lastMissileTime + 1000) return; 
+    
+    // Los misiles consumen su propia munición
+    currentMissileAmmo--;
+    updateShipTint();
+    lastMissileTime = scene.time.now;
+    playTone(300, 'sawtooth', 0.2);
+    
+    let numMissiles = (score >= 9) ? 4 : 2;
+    
+    for (let i = 0; i < numMissiles; i++) {
+        let mx = player.x + Phaser.Math.Between(-20, 20);
+        let my = player.y + Phaser.Math.Between(-20, 20);
+        let missile = missilesGroup.create(mx, my, 'missileTex');
+        if (missile) {
+            missile.target = target;
+            missile.birthTime = scene.time.now;
+            missile.randomOffset = Phaser.Math.FloatBetween(0, Math.PI * 2);
+            missile.rotation = Phaser.Math.FloatBetween(0, Math.PI * 2);
+            
+            let trail = scene.add.particles(0, 0, 'bulletTex', { 
+                speed: 0, scale: { start: 0.5, end: 0 },
+                alpha: { start: 1, end: 0 }, lifespan: 300, blendMode: 'ADD'
+            });
+            trail.startFollow(missile);
+            missile.trail = trail;
+            
+            scene.time.delayedCall(4000, () => {
+                if (missile.active) {
+                    if (missile.trail) missile.trail.destroy();
+                    missile.destroy();
+                }
+            });
         }
     }
 }

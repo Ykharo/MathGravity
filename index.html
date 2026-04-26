@@ -95,6 +95,14 @@
         var GLOBAL_AUTOPILOT = true;
         var GLOBAL_VALID_TABLES = [3,4,5,6,7,8,9];
         
+        // --- Armeria Variables ---
+        var GLOBAL_CANNON_AMMO = 4;
+        var GLOBAL_MISSILE_AMMO = 2;
+        var GLOBAL_RADAR_RADIUS = 300;
+        var GLOBAL_BULLET_SPEED = 800;
+        var GLOBAL_MISSILE_SPEED = 400;
+        var GLOBAL_MISSILE_TURN = 0.1;
+        
         var audioCtx = null;
         function initAudio() {
             if (!audioCtx) {
@@ -167,6 +175,15 @@
             if (name === 'RingRadius') {
                 window.GLOBAL_RING_RADIUS_PCT = parseFloat(val);
             }
+            if (name === 'GameWidth') {
+                window.GLOBAL_GAME_WIDTH = parseInt(val);
+            }
+            if (name === 'CannonAmmo') window.GLOBAL_CANNON_AMMO = parseInt(val);
+            if (name === 'MissileAmmo') window.GLOBAL_MISSILE_AMMO = parseInt(val);
+            if (name === 'Radar') window.GLOBAL_RADAR_RADIUS = parseInt(val);
+            if (name === 'BulletVel') window.GLOBAL_BULLET_SPEED = parseInt(val);
+            if (name === 'MissileVel') window.GLOBAL_MISSILE_SPEED = parseInt(val);
+            if (name === 'MissileTurn') window.GLOBAL_MISSILE_TURN = parseFloat(val);
         }
         
         function toggleRingVisible(cb) {
@@ -176,6 +193,11 @@
         function toggleLab() {
             var lab = document.getElementById('debug-panel');
             lab.style.display = (lab.style.display === 'none') ? 'block' : 'none';
+        }
+        
+        function toggleArmeria() {
+            var armeria = document.getElementById('armeria-panel');
+            armeria.style.display = (armeria.style.display === 'none') ? 'block' : 'none';
         }
 
         // PWA Offline Registration
@@ -202,7 +224,7 @@
         🔙 MENÚ
     </button>
 
-    <button id="btn-pause" onclick="togglePause()" style="position: absolute; top: 60px; left: 20px; z-index: 2000; font-family: monospace; font-size: 20px; cursor: pointer; color: #fff; background: rgba(0,0,0,0.6); padding: 8px 15px; border-radius: 8px; border: 1px solid #fff;">
+    <button id="btn-pause" onclick="togglePause()" style="position: absolute; top: 80px; left: 20px; z-index: 2000; font-family: monospace; font-size: 20px; cursor: pointer; color: #fff; background: rgba(0,0,0,0.6); padding: 8px 15px; border-radius: 8px; border: 1px solid #fff;">
         ⏸ PAUSA
     </button>
 
@@ -225,9 +247,14 @@
         </label>
     </div>
     
-    <button onclick="toggleLab()" style="position: absolute; top: 20px; right: 20px; z-index: 2000; font-size: 20px; cursor: pointer; background: rgba(0,0,0,0.6); color: white; border: 1px solid white; border-radius: 8px; padding: 8px; font-family: monospace;">
-        ⚙️ LAB
-    </button>
+    <div style="position: absolute; top: 20px; right: 20px; z-index: 2000; display: flex; gap: 10px;">
+        <button onclick="toggleArmeria()" style="font-size: 20px; cursor: pointer; background: rgba(0,0,0,0.6); color: #0FF; border: 1px solid #0FF; border-radius: 8px; padding: 8px; font-family: monospace;">
+            🔫 ARMERÍA
+        </button>
+        <button onclick="toggleLab()" style="font-size: 20px; cursor: pointer; background: rgba(0,0,0,0.6); color: white; border: 1px solid white; border-radius: 8px; padding: 8px; font-family: monospace;">
+            ⚙️ LAB
+        </button>
+    </div>
 
     <!-- PANEL DE DEBUG PROVISORIO -->
     <div id="debug-panel" style="display: none; position: absolute; bottom: 20px; left: 20px; background: rgba(0,0,0,0.85); color: #0f0; padding: 15px; border-radius: 8px; z-index: 1000; font-family: monospace; border: 1px solid #0f0; max-height: 85%; overflow-y: auto;">
@@ -262,6 +289,9 @@
         <label>Límite Velocidad Max: <span id="valMaxVel">150</span></label><br>
         <input type="range" min="50" max="1500" step="50" value="150" oninput="updatePhysVar('MaxVel', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
 
+        <label>Ancho del Juego (Fondo Naranja): <span id="valGameWidth">600</span></label><br>
+        <input type="range" min="300" max="2500" step="50" value="600" oninput="updatePhysVar('GameWidth', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+
         <label>Radio Muro Energía (Multiplicador): <span id="valRingRadius">0.25</span></label><br>
         <input type="range" min="0.1" max="0.8" step="0.05" value="0.25" oninput="updatePhysVar('RingRadius', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
         
@@ -269,6 +299,29 @@
             <input type="checkbox" checked onchange="toggleRingVisible(this)" style="transform: scale(1.3);">
             Muro de Energía Activo
         </label>
+    </div>
+
+    <!-- PANEL DE ARMERIA -->
+    <div id="armeria-panel" style="display: none; position: absolute; top: 70px; right: 20px; background: rgba(0,20,40,0.85); color: #0FF; padding: 15px; border-radius: 8px; z-index: 1000; font-family: monospace; border: 1px solid #0FF; max-height: 80%; overflow-y: auto; width: 300px;">
+        <h4 style="margin: 0 0 10px 0; color: #fff;">Armería (Modo 3)</h4>
+        
+        <label>Munición Balas (Recarga): <span id="valCannonAmmo">4</span></label><br>
+        <input type="range" min="1" max="20" step="1" value="4" oninput="updatePhysVar('CannonAmmo', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+
+        <label>Munición Misiles (Recarga): <span id="valMissileAmmo">2</span></label><br>
+        <input type="range" min="1" max="10" step="1" value="2" oninput="updatePhysVar('MissileAmmo', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+
+        <label>Radio Detección Radar: <span id="valRadar">300</span></label><br>
+        <input type="range" min="100" max="800" step="20" value="300" oninput="updatePhysVar('Radar', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+
+        <label>Velocidad Balas: <span id="valBulletVel">800</span></label><br>
+        <input type="range" min="200" max="2000" step="50" value="800" oninput="updatePhysVar('BulletVel', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+        
+        <label>Velocidad Misiles (Homing): <span id="valMissileVel">400</span></label><br>
+        <input type="range" min="100" max="1500" step="50" value="400" oninput="updatePhysVar('MissileVel', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+        
+        <label>Fuerza Giro Misiles: <span id="valMissileTurn">0.1</span></label><br>
+        <input type="range" min="0.01" max="0.5" step="0.01" value="0.1" oninput="updatePhysVar('MissileTurn', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
     </div>
 
     <div id="game-container"></div>
