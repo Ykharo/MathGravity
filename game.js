@@ -294,8 +294,10 @@ function create() {
 
     // 7. Colisiones y Físicas Generales
     this.physics.add.collider(player, enemiesGroup, hitEnemy, null, this);
-    this.physics.add.collider(player, ringGroup);
-    this.physics.add.collider(enemiesGroup, ringGroup);
+    
+    // Ignorar por completo la colisión física si el usuario apagó el muro en el Lab
+    this.physics.add.collider(player, ringGroup, null, () => window.GLOBAL_RING_VISIBLE !== false, this);
+    this.physics.add.collider(enemiesGroup, ringGroup, null, () => window.GLOBAL_RING_VISIBLE !== false, this);
 
     // Colisión de Menú Top (Aceptar misión del bloque con rebote)
     this.physics.add.collider(player, mathBlocksGroup, hitMathBlock, null, this);
@@ -360,6 +362,14 @@ function update() {
     if (window.GLOBAL_RING_VISIBLE !== undefined && ringGroup.visible !== window.GLOBAL_RING_VISIBLE) {
         ringGroup.setVisible(window.GLOBAL_RING_VISIBLE);
         ringGroup.children.iterate(p => p.body.enable = window.GLOBAL_RING_VISIBLE);
+    }
+    
+    if (window.centralRingGraphic) {
+        window.centralRingGraphic.clear();
+        if (window.GLOBAL_RING_VISIBLE !== false) {
+            window.centralRingGraphic.lineStyle(1, 0xD84315, 0.4); 
+            window.centralRingGraphic.strokeCircle(config.width/2, config.height/2, currentRadius);
+        }
     }
 
     // Configuración Variables Vivo
@@ -863,9 +873,40 @@ function spawnAnswerCoins(scene, prob) {
     
     Phaser.Utils.Array.Shuffle(answers);
     
+    let spawnedPositions = [];
+    
     for (let i = 0; i < answers.length; i++) {
-        let x = Phaser.Math.Between(50, config.width - 50);
-        let y = Phaser.Math.Between(180, config.height - 80); 
+        let x, y;
+        let validPosition = false;
+        let attempts = 0;
+        
+        while (!validPosition && attempts < 50) {
+            x = Phaser.Math.Between(50, config.width - 50);
+            y = Phaser.Math.Between(180, config.height - 80); 
+            
+            // Distancia mínima al jugador (evita colisión instantánea)
+            if (Phaser.Math.Distance.Between(x, y, player.x, player.y) < 120) {
+                attempts++;
+                continue;
+            }
+            
+            // Distancia mínima entre monedas
+            let tooClose = false;
+            for (let pos of spawnedPositions) {
+                if (Phaser.Math.Distance.Between(x, y, pos.x, pos.y) < 100) {
+                    tooClose = true;
+                    break;
+                }
+            }
+            
+            if (!tooClose) {
+                validPosition = true;
+            } else {
+                attempts++;
+            }
+        }
+        
+        spawnedPositions.push({x: x, y: y});
         
         let coin = answersGroup.create(x, y, 'coinTex');
         coin.body.setCircle(15);
@@ -1142,9 +1183,9 @@ function hitRing(player, ringSegment) {
 }
 
 function dibujarAnilloCentral(scene) {
-    let gfx = scene.add.graphics();
-    gfx.lineStyle(1, 0xD84315, 0.4); 
-    gfx.strokeCircle(config.width/2, config.height/2, config.width * 0.35);
+    window.centralRingGraphic = scene.add.graphics();
+    window.centralRingGraphic.lineStyle(1, 0xD84315, 0.4); 
+    window.centralRingGraphic.strokeCircle(config.width/2, config.height/2, config.width * 0.35);
 }
 
 function dibujarYCrearParedesAnillo(scene) {
