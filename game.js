@@ -93,8 +93,11 @@ function playLevelUp() {
 
 function speakText(text) {
     if ('speechSynthesis' in window) {
+        // Prevenir bug de encolamiento infinito en Safari iOS
+        window.speechSynthesis.cancel();
+        
         let utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'es-LA'; // Español Latinoamericano
+        utterance.lang = 'es-ES'; // Más universal en Apple que es-LA
         utterance.rate = 1.1;
         window.speechSynthesis.speak(utterance);
     }
@@ -350,7 +353,14 @@ function update() {
     // Actualizar rotaciones físicas y visuales al mismo tiempo (perlas visibles circulares)
     let rotAmount = 0.003 * timeDilation;
     globalRingRotation += rotAmount;
-    Phaser.Actions.RotateAroundDistance(ringGroup.getChildren(), { x: config.width / 2, y: config.height / 2 }, rotAmount, config.width * 0.35);
+    
+    let currentRadius = config.width * (window.GLOBAL_RING_RADIUS_PCT !== undefined ? window.GLOBAL_RING_RADIUS_PCT : 0.35);
+    Phaser.Actions.RotateAroundDistance(ringGroup.getChildren(), { x: config.width / 2, y: config.height / 2 }, rotAmount, currentRadius);
+    
+    if (window.GLOBAL_RING_VISIBLE !== undefined && ringGroup.visible !== window.GLOBAL_RING_VISIBLE) {
+        ringGroup.setVisible(window.GLOBAL_RING_VISIBLE);
+        ringGroup.children.iterate(p => p.body.enable = window.GLOBAL_RING_VISIBLE);
+    }
 
     // Configuración Variables Vivo
     let tension = window.GLOBAL_TENSION || 8;
