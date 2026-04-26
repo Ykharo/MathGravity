@@ -60,13 +60,13 @@ let currentPhase = "WAITING_BLOCK"; // "WAITING_BLOCK" o "WAITING_ANSWER"
 let currentGameMode = 0; // 0=Menu, 1=Secuencial, 2=Aleatorio Tabla, 3=Survival
 
 // --- Armas y Combate (Modo 3) ---
-let bulletsGroup;
-let missilesGroup;
-let radarGraphics = null;
 let currentCannonAmmo = 0;
 let currentMissileAmmo = 0;
 let lastFireTime = 0;
 let isRadarLocked = false;
+let playerShieldCharges = 0;
+let enemyBulletsGroup;
+let enemyRadarGraphics = null;
 
 // Ancho dinámico del juego
 let currentGameWidth = window.innerWidth > 600 ? 600 : window.innerWidth;
@@ -302,6 +302,13 @@ function create() {
         immovable: true // Para que la nave rebote si es falso
     });
     
+    // Balas enemigas
+    enemyBulletsGroup = this.physics.add.group();
+    this.physics.add.overlap(player, enemyBulletsGroup, (p, b) => { b.destroy(); takeDamage(this, 10); }, null, this);
+    
+    enemyRadarGraphics = this.add.graphics();
+
+    
     // spawnMathBlocks(this); // Ahora se invoca desde startGameMode()
 
     // 7. Colisiones y Físicas Generales
@@ -397,11 +404,18 @@ function update() {
         ringGroup.children.iterate(p => p.body.enable = window.GLOBAL_RING_VISIBLE);
     }
     
+    if (enemyRadarGraphics) enemyRadarGraphics.clear();
+
     if (window.centralRingGraphic) {
         window.centralRingGraphic.clear();
         if (window.GLOBAL_RING_VISIBLE !== false) {
-            window.centralRingGraphic.lineStyle(1, 0xD84315, 0.4); 
-            window.centralRingGraphic.strokeCircle(config.width/2, centerY, currentRadius);
+            window.centralRingGraphic.lineStyle(2, 0xD84315, 0.4); 
+            // Apertura de 2 naves (arco de apertura ampliado)
+            let startAngle = globalRingRotation;
+            let endAngle = globalRingRotation + (Math.PI * 2) - 0.6; // ~2x ancho nave
+            window.centralRingGraphic.beginPath();
+            window.centralRingGraphic.arc(config.width/2, centerY, currentRadius, startAngle, endAngle);
+            window.centralRingGraphic.strokePath();
         }
     }
 
@@ -420,18 +434,9 @@ function update() {
     let nearestEnemyForCannon = null;
     let nearestEnemyDistCannon = window.GLOBAL_RADAR_RADIUS || 300;
     
-    // Escudo automático de emergencia (Nivel 10+)
-    if (currentGameMode === 3 && score >= 10 && !hasShield) {
-        enemiesGroup.getChildren().forEach(enemy => {
-            if (enemy.active) {
-                let dist = Phaser.Math.Distance.Between(player.x, player.y, enemy.x, enemy.y);
-                if (dist < 80) { // Amenaza inminente
-                    hasShield = true;
-                    shieldTimer = 5000;
-                }
-            }
-        });
-    }
+    // El escudo automático ahora es reactivo en takeDamage (Nivel 10+)
+    // Eliminada la activación por proximidad para que sea solo de reacción
+
 
     if (currentGameMode === 3) {
         // Escaneo global para misiles
@@ -643,9 +648,72 @@ function update() {
                  
                  // Forzamos las velocidades vectorizadas mezcladas
                  enemy.body.setVelocity(vX, vY);
+                 
+                 // IA DE DISPARO PARA NAVES ROJAS
+                 if (enemy.texture && enemy.texture.key === 'enemyShieldTex') {
+                     let distToPlayer = Phaser.Math.Distance.Between(enemy.x, enemy.y, player.x, player.y);
+                     let radarRange = 250;
+                     
+                     if (distToPlayer < radarRange) {
+                         // DIBUJAR RADAR ENEMIGO
+                         enemyRadarGraphics.lineStyle(2, 0xff0000, 0.3);
+                         enemyRadarGraphics.fillStyle(0xff0000, 0.05);
+                         
+                         let startAngle = enemy.rotation - 0.4;
+                         let endAngle = enemy.rotation + 0.4;
+                         
+                         enemyRadarGraphics.beginPath();
+                         enemyRadarGraphics.moveTo(enemy.x, enemy.y);
+                         enemyRadarGraphics.arc(enemy.x, enemy.y, radarRange, startAngle, endAngle);
+                         enemyRadarGraphics.closePath();
+                         enemyRadarGraphics.fillPath();
+                         enemyRadarGraphics.strokePath();
+                         
+                         let fireRate = window.GLOBAL_ENEMY_FIRE_RATE || 2000;
+                         if (!enemy.lastFireTime) enemy.lastFireTime = 0;
+                         
+                         if (this.time.now > enemy.lastFireTime + fireRate) {
+                             let angleToPlayer = Phaser.Math.Angle.Between(enemy.x, enemy.y, player.x, player.y);
+                             let diff = Phaser.Math.Angle.Wrap(angleToPlayer - enemy.rotation);
+                             
+                             if (Math.abs(diff) < 0.4) { 
+                                 enemy.lastFireTime = this.time.now;
+                                 
+                                 let numBullets = 1;
+                                 if (score >= 10) numBullets = 5;
+                                 else if (score >= 9) numBullets = 4;
+                                 else if (score >= 8) numBullets = 3;
+                                 else if (score >= 7) numBullets = 2;
+                                 
+                                 for(let n=0; n<numBullets; n++) {
+                                     let eb = enemyBulletsGroup.create(enemy.x, enemy.y, 'bulletTex');
+                                     if(eb) {
+                                         eb.setTint(0xff0000);
+                                         eb.body.setCircle(4);
+                                         let spread = (n - (numBullets-1)/2) * 0.1;
+                                         let speed = window.GLOBAL_ENEMY_BULLET_SPEED || 400;
+                                         this.physics.velocityFromRotation(angleToPlayer + spread, speed, eb.body.velocity);
+                                         this.time.delayedCall(2000, () => { if(eb.active) eb.destroy(); });
+                                     }
+                                 }
+                                 
+                                 if (score >= 10) {
+                                     // Misil enemigo ocasional
+                                     this.time.delayedCall(200, () => {
+                                         let em = enemyBulletsGroup.create(enemy.x, enemy.y, 'missileTex');
+                                         if(em) {
+                                             em.setTint(0xff00ff);
+                                             this.physics.velocityFromRotation(angleToPlayer, 250, em.body.velocity);
+                                         }
+                                     });
+                                 }
+                             }
+                         }
+                     }
+                 }
              }
         }
-    });
+    }, this);
 
     // Misiles Homing Update
     if (typeof missilesGroup !== 'undefined') {
@@ -847,8 +915,11 @@ function hitAnswerCoin(player, coin) {
         playSuccess();
         speakText(`¡Correcto!, ${activeProblem.a} por ${activeProblem.b} es ${activeProblem.result}`);
         
-        score += 1;
+        score++;
         document.getElementById('score').innerText = score;
+        
+        // Recargar escudo si tiene 10+ respuestas
+        if (score >= 10) playerShieldCharges = 3;
         
         // Recarga Munición en Modo 3
         if (currentGameMode === 3) {
@@ -878,14 +949,17 @@ function hitAnswerCoin(player, coin) {
         spawnEnemy(this); // Ganas = Nace enemigo
         
         if (currentGameMode === 3) {
-            if (score >= 6) {
-                spawnEnemy(this);
-                spawnEnemy(this);
-                spawnEnemy(this);
-                spawnEnemy(this);
-            } else if (score >= 5) {
-                spawnEnemy(this);
-                spawnEnemy(this);
+            let totalEnemies = enemiesGroup.getChildren().length;
+            if (totalEnemies < 20) { // Límite de seguridad para iPad
+                if (score >= 6) {
+                    // Spawn escalonado para no saturar las físicas en un solo frame
+                    for(let k=0; k<4; k++) {
+                        this.time.delayedCall(100 * (k+1), () => { if(!isGameOver) spawnEnemy(this); });
+                    }
+                } else if (score >= 5) {
+                    this.time.delayedCall(100, () => { if(!isGameOver) spawnEnemy(this); });
+                    this.time.delayedCall(200, () => { if(!isGameOver) spawnEnemy(this); });
+                }
             }
         }
         
@@ -1038,25 +1112,16 @@ function spawnAnswerCoins(scene, prob) {
             x = Phaser.Math.Between(50, config.width - 50);
             y = Phaser.Math.Between(180, config.height - 80); 
             
-            // Distancia mínima al jugador (evita colisión instantánea)
-            if (Phaser.Math.Distance.Between(x, y, player.x, player.y) < 120) {
-                attempts++;
-                continue;
-            }
+            validPosition = true;
             
-            // Distancia mínima entre monedas
-            let tooClose = false;
-            for (let pos of spawnedPositions) {
-                if (Phaser.Math.Distance.Between(x, y, pos.x, pos.y) < 100) {
-                    tooClose = true;
+            for (let j = 0; j < spawnedPositions.length; j++) {
+                if (Phaser.Math.Distance.Between(x, y, spawnedPositions[j].x, spawnedPositions[j].y) < 100) {
+                    validPosition = false;
                     break;
                 }
             }
-            
-            if (!tooClose) {
-                validPosition = true;
-            } else {
-                attempts++;
+            if (Phaser.Math.Distance.Between(x, y, player.x, player.y) < 150) {
+                validPosition = false;
             }
         }
         
@@ -1158,10 +1223,16 @@ function createCustomTextures(scene) {
     graphics.generateTexture('bulletTex', 8, 8);
     graphics.clear();
 
-    // Textura Enemigo (Triángulo Oscuro correlativo)
-    graphics.fillStyle(0x333333, 1);
+    // Textura Enemigo Base (Blanca para que acepte tintes)
+    graphics.fillStyle(0xFFFFFF, 1);
     graphics.fillTriangle(15, 0, 30, 36, 0, 36);
     graphics.generateTexture('enemyTex', 30, 36);
+    graphics.clear();
+
+    // Textura Enemigo Elite / Escudo (Roja de nacimiento)
+    graphics.fillStyle(0xFF0000, 1);
+    graphics.fillTriangle(15, 0, 30, 36, 0, 36);
+    graphics.generateTexture('enemyShieldTex', 30, 36);
     graphics.clear();
 
     // Textura Misil (Pequeño rombo/cruz)
@@ -1214,10 +1285,12 @@ function spawnEnemy(scene) {
     }
     
     let x, y;
+    let attempts = 0;
     do {
          x = Phaser.Math.Between(20, config.width - 20);
          y = Phaser.Math.Between(20, config.height - 20);
-    } while (Phaser.Math.Distance.Between(player.x, player.y, x, y) < 150); 
+         attempts++;
+    } while (Phaser.Math.Distance.Between(player.x, player.y, x, y) < 150 && attempts < 50); 
 
     let enemy = enemiesGroup.create(x, y, 'enemyTex');
     enemy.body.setCircle(12, 0, 0); 
@@ -1226,18 +1299,21 @@ function spawnEnemy(scene) {
     
     // Asignación de Puntos de Vida y Escudo
     enemy.hp = 1;
-    enemy.setTint(0x000000); // Negro por defecto
+    let enemyColor = 0x000000; // Negro por defecto
+    let baseScale = 1.0;
     
     if (currentGameMode === 3 && score >= 3) {
-        if (Math.random() < 0.25) { // 25% de probabilidad de tener escudo
+        let chance = (window.GLOBAL_SHIELD_CHANCE !== undefined) ? window.GLOBAL_SHIELD_CHANCE : 0.25;
+        if (Math.random() < chance) {
             enemy.hp = 3;
-            enemy.setTint(0xFF0000); // Rojo Fuerte (Escudo Maximo)
+            enemy.setTexture('enemyShieldTex');
+            enemy.clearTint(); // Usa su color rojo natural
+            baseScale = 1.15; // 15% más grande
+        } else {
+            enemy.setTint(enemyColor);
         }
-    }
-    
-    // Si estamos en nivel 2 avanzardo y no tienen escudo, nacen furiosos
-    if (gameLevel === 2 && enemy.hp === 1) {
-        enemy.setTint(0xff0000);
+    } else {
+        enemy.setTint(enemyColor);
     }
     
     let randomAngle = Phaser.Math.FloatBetween(0, Math.PI * 2);
@@ -1249,7 +1325,7 @@ function spawnEnemy(scene) {
     enemy.setScale(0);
     scene.tweens.add({
         targets: enemy,
-        scale: 1,
+        scale: baseScale,
         duration: 400,
         ease: 'Back.easeOut'
     });
@@ -1263,6 +1339,30 @@ function obtenerVidaSegmentada(hp) {
 }
 
 function takeDamage(scene, amount) {
+    // Escudo defensivo reactivo por cargas (Modo 3, 10+ respuestas)
+    if (currentGameMode === 3 && score >= 10 && playerShieldCharges > 0) {
+        playerShieldCharges--;
+        
+        // Efecto visual instantáneo del escudo
+        playTone(600, 'sine', 0.1);
+        let reactionShield = scene.add.circle(player.x, player.y, 40);
+        reactionShield.setStrokeStyle(4, 0x00FFFF, 1);
+        scene.tweens.add({
+            targets: reactionShield,
+            scale: 1.5,
+            alpha: 0,
+            duration: 400,
+            onUpdate: () => { reactionShield.setPosition(player.x, player.y); },
+            onComplete: () => reactionShield.destroy()
+        });
+        return; // Bloquea el daño consumiendo carga
+    }
+
+    if (hasShield) {
+        // Lógica para escudo de Power-up (item) si existiera
+        return;
+    }
+
     playerHealth -= amount;
     if (playerHealth < 0) playerHealth = 0;
     
@@ -1301,38 +1401,47 @@ function updateShipTint() {
 function hitEnemyWithWeapon(weapon, enemy) {
     if (!enemy.active || !weapon.active) return;
     
+    let scene = enemy.scene;
     let damage = (weapon.texture && weapon.texture.key === 'missileTex') ? 3 : 1;
     enemy.hp -= damage;
     
-    // Destruir rastro de forma segura sin llamar funciones inexistentes
+    // Destruir rastro de forma segura
     if (weapon.trail) {
         weapon.trail.destroy();
     }
-    weapon.destroy();
     
     if (enemy.hp > 0) {
         // El escudo resistió el impacto
-        playTone(400, 'triangle', 0.1); // Sonido de impacto a escudo
+        playTone(400, 'triangle', 0.1); 
         
-        // Efecto visual del campo de fuerza
-        let hitRing = weapon.scene.add.circle(enemy.x, enemy.y, 20);
+        // Efecto visual usando la escena del enemigo (que sigue activo)
+        let hitRing = scene.add.circle(enemy.x, enemy.y, 20);
         hitRing.setStrokeStyle(3, 0xff0000, 1);
-        weapon.scene.tweens.add({ 
+        scene.tweens.add({ 
             targets: hitRing, scale: 2, alpha: 0, duration: 300, 
             onComplete: () => { hitRing.destroy(); }
         });
         
-        // Degradar color de escudo
-        if (enemy.hp === 2) enemy.setTint(0x770000); // Rojo Oscuro
-        else enemy.setTint(0x000000); // Escudo roto, negro
+        // Degradar color de escudo progresivamente
+        if (enemy.hp === 2) {
+            enemy.setTint(0x880000); // Rojo Granate (Dañado)
+        } else {
+            // Escudo roto: Cambia a textura normal, escala normal y color negro
+            enemy.setTexture('enemyTex');
+            enemy.setTint(0x000000); 
+            enemy.setScale(1.0);
+        }
         
-        return; // No destruir enemigo aún
+        weapon.destroy(); 
+        return; 
     }
     
     // Golpe fatal
     playExplosion();
-    let ring = weapon.scene.add.circle(enemy.x, enemy.y, 10, 0xff0000);
-    weapon.scene.tweens.add({ targets: ring, scale: 3, alpha: 0, duration: 200, onComplete: () => { ring.destroy(); }});
+    let ring = scene.add.circle(enemy.x, enemy.y, 10, 0xff0000);
+    scene.tweens.add({ targets: ring, scale: 3, alpha: 0, duration: 200, onComplete: () => { ring.destroy(); }});
+    
+    weapon.destroy();
     enemy.destroy();
 }
 
@@ -1416,9 +1525,20 @@ function hitRing(player, ringSegment) {
 function dibujarAnilloCentral(scene) {
     let currentRadius = config.width * (window.GLOBAL_RING_RADIUS_PCT !== undefined ? window.GLOBAL_RING_RADIUS_PCT : 0.25);
     let centerY = config.height / 2 + (currentRadius * 0.25);
+    
+    if (window.centralRingGraphic) window.centralRingGraphic.destroy();
     window.centralRingGraphic = scene.add.graphics();
-    window.centralRingGraphic.lineStyle(1, 0xD84315, 0.4); 
-    window.centralRingGraphic.strokeCircle(config.width/2, centerY, currentRadius);
+    window.centralRingGraphic.lineStyle(2, 0xD84315, 0.4); 
+    
+    // Dibujar anillo con apertura (arco roto)
+    // Apertura de 1.5 naves (36px aprox) -> Angulo de unos 60 grados para ese radio
+    let openingAngle = 1.0; // aprox 57 grados
+    let startAngle = globalRingRotation;
+    let endAngle = globalRingRotation + (Math.PI * 2) - openingAngle;
+    
+    window.centralRingGraphic.beginPath();
+    window.centralRingGraphic.arc(config.width/2, centerY, currentRadius, startAngle, endAngle);
+    window.centralRingGraphic.strokePath();
 }
 
 function dibujarYCrearParedesAnillo(scene) {
