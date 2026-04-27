@@ -1556,57 +1556,56 @@ function spawnEnemy(scene) {
 
 function actualizarBarraVidaGrafica(scene) {
     if (!healthBarGraphics) return;
+    
+    // Obtener dimensiones reales de la cámara (más fiable en iPad)
+    let gameW = scene.cameras.main.width;
+    
     healthBarGraphics.clear();
+    healthBarGraphics.setDepth(3000); // Asegurar que esté por encima de todo
     
-    let w = 220; // Más ancho
-    let h = 24;
-    let x = config.width - w - 20;
-    let y = 120; // Misma altura que Armería en el lado opuesto
+    let w = 280; // Un poco más ancho para que se vea mejor
+    let h = 30;  // Un poco más alto
+    let x = gameW - w - 20; // El final queda alineado a 20px del borde (como el botón menú)
+    let y = 120; // Altura coordinada con los botones superiores
     
-    // 1. Sombra/Brillo exterior
-    healthBarGraphics.lineStyle(4, 0x000000, 0.3);
-    healthBarGraphics.strokeRoundedRect(x + 2, y + 2, w, h, 6);
+    // 1. Sombra exterior
+    healthBarGraphics.fillStyle(0x000000, 0.4);
+    healthBarGraphics.fillRoundedRect(x + 4, y + 4, w, h, 8);
     
-    // 2. Fondo del contenedor
-    healthBarGraphics.fillStyle(0x222222, 0.8);
-    healthBarGraphics.fillRoundedRect(x, y, w, h, 6);
+    // 2. Fondo del contenedor (Gris oscuro premium)
+    healthBarGraphics.fillStyle(0x1a1a1a, 0.9);
+    healthBarGraphics.fillRoundedRect(x, y, w, h, 8);
     
-    // 3. Borde Neon
-    let borderColor = playerHealth > 30 ? 0x00FFFF : 0xFF0055;
-    healthBarGraphics.lineStyle(2, borderColor, 1);
-    healthBarGraphics.strokeRoundedRect(x, y, w, h, 6);
+    // 3. Borde Neon con Glow
+    let colorNeon = playerHealth > 30 ? 0x00FFFF : 0xFF0055;
+    healthBarGraphics.lineStyle(3, colorNeon, 1);
+    healthBarGraphics.strokeRoundedRect(x, y, w, h, 8);
     
     // 4. Relleno (Vida actual)
     if (playerHealth > 0) {
-        let fillW = (playerHealth / 100) * (w - 4);
+        let fillW = (playerHealth / 100) * (w - 8);
         
-        // Gradiente lógico
-        let color = 0x00FF88; // Verde neon
-        if (playerHealth <= 60) color = 0xFFCC00; // Amarillo/Naranja
-        if (playerHealth <= 30) color = 0xFF3300; // Rojo
+        // Gradiente lógico simplificado para máxima compatibilidad
+        let fillColor = 0x00FF88; // Verde neon
+        if (playerHealth <= 60) fillColor = 0xFFCC00; // Amarillo
+        if (playerHealth <= 30) fillColor = 0xFF3300; // Rojo
         
-        healthBarGraphics.fillStyle(color, 1);
-        healthBarGraphics.fillRoundedRect(x + 2, y + 2, fillW, h - 4, 4);
+        healthBarGraphics.fillStyle(fillColor, 1);
+        healthBarGraphics.fillRoundedRect(x + 4, y + 4, fillW, h - 8, 6);
         
-        // Brillo interior (Glossy effect)
+        // Efecto Brillo (Gloss)
         healthBarGraphics.fillStyle(0xFFFFFF, 0.2);
-        healthBarGraphics.fillRoundedRect(x + 2, y + 2, fillW, h / 2 - 2, 2);
+        healthBarGraphics.fillRoundedRect(x + 4, y + 4, fillW, (h - 8) / 2, 4);
     }
     
     if (healthBarText) {
         healthBarText.setText(`${playerHealth}%`);
-        healthBarText.setX(x + w / 2); // Centrado en la barra
+        healthBarText.setX(x + w / 2); // Texto centrado sobre la barra
         healthBarText.setY(y + h / 2);
-        healthBarText.setFill('#FFF');
-        healthBarText.setShadow(1, 1, '#000', 2);
+        healthBarText.setDepth(3001);
+        healthBarText.setAlpha(1);
+        healthBarText.setVisible(true);
     }
-    
-    // 5. Etiqueta "LIFE" o Corazón (Opcional pero vistoso)
-    healthBarGraphics.fillStyle(0xFFFFFF, 1);
-    // Dibujar un pequeño corazón o icono simple a la izquierda
-    let iconX = x - 25;
-    let iconY = y + h/2;
-    // ... (simplificado para no sobrecargar de dibujo manual, usaremos el texto para el porcentaje centrado)
 }
 
 function obtenerVidaSegmentada(hp) {
