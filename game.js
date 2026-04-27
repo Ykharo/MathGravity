@@ -963,7 +963,7 @@ function spawnSingleMathBlock(scene, i, forcedA = null, forcedB = null) {
     let totalWidth = (4 * blockWidth) + (3 * gap);
     let startX = (config.width - totalWidth) / 2;
     let x = startX + (i * (blockWidth + gap)) + (blockWidth / 2);
-    let y = 140; // Bajamos otros 30 para asegurar visibilidad total
+    let y = 140 + (window.GLOBAL_TOP_OFFSET || 0); // Bajamos otros 30 para asegurar visibilidad total
 
     let blockType = "NORMAL";
     let tex = 'blockTex_orange';
@@ -1564,7 +1564,7 @@ function actualizarBarraVidaGrafica(scene) {
     let w = 240; // Más corta (longitud)
     let h = 40;  // Más ancha (grosor)
     let x = gameW - w - 20; 
-    let y = 120; 
+    let y = 120 + (window.GLOBAL_TOP_OFFSET || 0); 
     
     // 1. Sombra exterior
     healthBarGraphics.fillStyle(0x000000, 0.4);
