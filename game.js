@@ -523,9 +523,9 @@ function create() {
         });
     }
     
-    // Textura dinámica UI de Vida a la esquina superior derecha
-    healthBarText = this.add.text(config.width - 20, 30, obtenerVidaSegmentada(playerHealth), { fontSize: '18px', fill: '#FFF', fontStyle: 'bold', align: 'right', fontFamily: 'monospace' });
-    healthBarText.setOrigin(1, 0.5);
+    // Textura dinámica UI de Vida a la izquierda (según pedido del usuario)
+    healthBarText = this.add.text(20, 30, obtenerVidaSegmentada(playerHealth), { fontSize: '18px', fill: '#FFF', fontStyle: 'bold', align: 'left', fontFamily: 'monospace' });
+    healthBarText.setOrigin(0, 0.5);
     
     // Escudo visual base (Oculto)
     shieldGraphics = this.add.graphics();
@@ -592,11 +592,11 @@ function update() {
         this.physics.world.setBounds(0, 0, currentGameWidth, config.height);
         
         // Reposicionar UI estática si existe
-        if (healthBarText) healthBarText.setX(config.width - 20);
+        if (healthBarText) healthBarText.setX(20);
     }
     
     let currentRadius = config.width * (window.GLOBAL_RING_RADIUS_PCT !== undefined ? window.GLOBAL_RING_RADIUS_PCT : 0.15);
-    let centerY = config.height / 2 + (currentRadius * 0.25); // Offset hacia abajo un cuarto de radio
+    let centerY = config.height / 2 + (currentRadius * 0.5); // 1/4 más abajo que antes (0.25 -> 0.5)
     Phaser.Actions.RotateAroundDistance(ringGroup.getChildren(), { x: config.width / 2, y: centerY }, rotAmount, currentRadius);
     
     if (window.GLOBAL_RING_VISIBLE !== undefined && ringGroup.visible !== window.GLOBAL_RING_VISIBLE) {
@@ -959,9 +959,11 @@ function update() {
 function spawnSingleMathBlock(scene, i, forcedA = null, forcedB = null) {
     let blockWidth = 120;
     let blockHeight = 50;
-    let spacing = config.width / 4;
-    let x = (spacing * i) + (spacing / 2);
-    let y = 160; // Bajamos el spawn para que no tape los botones del top
+    let gap = 20;
+    let totalWidth = (4 * blockWidth) + (3 * gap);
+    let startX = (config.width - totalWidth) / 2;
+    let x = startX + (i * (blockWidth + gap)) + (blockWidth / 2);
+    let y = 80; // Lo más arriba posible
 
     let blockType = "NORMAL";
     let tex = 'blockTex_orange';
@@ -1359,7 +1361,7 @@ function spawnAnswerCoins(scene, prob) {
 
 function spawnSinglePearl(scene, rad, radius, arcoGrozor) {
      let currentRadius = config.width * (window.GLOBAL_RING_RADIUS_PCT !== undefined ? window.GLOBAL_RING_RADIUS_PCT : 0.15);
-     let centerY = config.height / 2 + (currentRadius * 0.25);
+     let centerY = config.height / 2 + (currentRadius * 0.5);
      let px = config.width / 2 + Math.cos(rad) * radius;
      let py = centerY + Math.sin(rad) * radius;
      
@@ -1765,7 +1767,7 @@ function hitRingWall(player, ringSegment) {
 
 function dibujarAnilloCentral(scene) {
     let currentRadius = config.width * (window.GLOBAL_RING_RADIUS_PCT !== undefined ? window.GLOBAL_RING_RADIUS_PCT : 0.15);
-    let centerY = config.height / 2 + (currentRadius * 0.25);
+    let centerY = config.height / 2 + (currentRadius * 0.5);
     
     if (window.centralRingGraphic) window.centralRingGraphic.destroy();
     window.centralRingGraphic = scene.add.graphics();
