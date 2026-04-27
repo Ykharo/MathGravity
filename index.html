@@ -260,7 +260,7 @@
     </style>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
     <script>
-        var GLOBAL_TOP_OFFSET = 0; // Ajuste dinámico para iPad/Chrome
+        var GLOBAL_TOP_OFFSET = -70; // Ajuste dinámico para iPad/Chrome (Default -70 pedido por user)
         var GLOBAL_TENSION = 0.5;
         var GLOBAL_DRAG = 0.001;
         var GLOBAL_MAX_VEL = 150;
@@ -321,15 +321,17 @@
             labels.forEach(l => l.innerText = Math.round(val * 100) + '%');
         }
 
-        // Cargar volumen al inicio
-        window.addEventListener('DOMContentLoaded', () => {
             const savedVol = localStorage.getItem('mathGravVolume') || 0.5;
             setGlobalVolume(savedVol);
 
-            // Inicializar ancho del lab
+            // Inicializar ancho del lab y offset inicial
             const gameWidth = window.innerWidth;
             document.getElementById('valGameWidth').innerText = gameWidth;
             document.getElementById('sliderGameWidth').value = gameWidth;
+            
+            // Aplicar offset inicial de -70
+            updatePhysVar('TopOffset', -70);
+            document.getElementById('sliderTopOffset').value = -70;
         });
         
         function updateValidTables() {
@@ -597,8 +599,8 @@
         </label>
 
         <hr style="border: 0.5px solid #0f0; margin: 15px 0;">
-        <label style="color: #ff0;">Ajuste Vertical UI (iPad/Notch): <span id="valTopOffset">0</span></label><br>
-        <input type="range" min="-150" max="150" step="5" value="0" oninput="updatePhysVar('TopOffset', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+        <label style="color: #ff0;">Ajuste Vertical UI (iPad/Notch): <span id="valTopOffset">-70</span></label><br>
+        <input type="range" id="sliderTopOffset" min="-150" max="150" step="5" value="-70" oninput="updatePhysVar('TopOffset', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
     </div>
 
     <!-- PANEL DE ARMERIA -->

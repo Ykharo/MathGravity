@@ -1158,6 +1158,9 @@ function hitAnswerCoin(player, coin) {
         score++;
         document.getElementById('score').innerText = score;
         
+        // RECUPERACIÓN DE VIDA: +20% por acierto (Máximo 100)
+        playerHealth = Math.min(100, playerHealth + 20);
+        
         // Recargar escudo si tiene 10+ respuestas
         if (score >= 10) playerShieldCharges = 3;
         
