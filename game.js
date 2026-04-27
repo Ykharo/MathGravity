@@ -1557,53 +1557,53 @@ function spawnEnemy(scene) {
 function actualizarBarraVidaGrafica(scene) {
     if (!healthBarGraphics) return;
     
-    // Obtener dimensiones reales de la cámara (más fiable en iPad)
     let gameW = scene.cameras.main.width;
-    
     healthBarGraphics.clear();
-    healthBarGraphics.setDepth(3000); // Asegurar que esté por encima de todo
+    healthBarGraphics.setDepth(3000);
     
-    let w = 280; // Un poco más ancho para que se vea mejor
-    let h = 30;  // Un poco más alto
-    let x = gameW - w - 20; // El final queda alineado a 20px del borde (como el botón menú)
-    let y = 120; // Altura coordinada con los botones superiores
+    let w = 240; // Más corta (longitud)
+    let h = 40;  // Más ancha (grosor)
+    let x = gameW - w - 20; 
+    let y = 120; 
     
     // 1. Sombra exterior
     healthBarGraphics.fillStyle(0x000000, 0.4);
-    healthBarGraphics.fillRoundedRect(x + 4, y + 4, w, h, 8);
+    healthBarGraphics.fillRoundedRect(x + 4, y + 4, w, h, 10);
     
-    // 2. Fondo del contenedor (Gris oscuro premium)
-    healthBarGraphics.fillStyle(0x1a1a1a, 0.9);
-    healthBarGraphics.fillRoundedRect(x, y, w, h, 8);
+    // 2. Fondo del contenedor
+    healthBarGraphics.fillStyle(0x111111, 0.9);
+    healthBarGraphics.fillRoundedRect(x, y, w, h, 10);
     
-    // 3. Borde Neon con Glow
+    // 3. Borde Neon
     let colorNeon = playerHealth > 30 ? 0x00FFFF : 0xFF0055;
     healthBarGraphics.lineStyle(3, colorNeon, 1);
-    healthBarGraphics.strokeRoundedRect(x, y, w, h, 8);
+    healthBarGraphics.strokeRoundedRect(x, y, w, h, 10);
     
-    // 4. Relleno (Vida actual)
+    // 4. Relleno con DEGRADADO
     if (playerHealth > 0) {
         let fillW = (playerHealth / 100) * (w - 8);
         
-        // Gradiente lógico simplificado para máxima compatibilidad
-        let fillColor = 0x00FF88; // Verde neon
-        if (playerHealth <= 60) fillColor = 0xFFCC00; // Amarillo
-        if (playerHealth <= 30) fillColor = 0xFF3300; // Rojo
+        let c1 = 0x00FF88; // Verde arriba
+        let c2 = 0x009944; // Verde abajo
+        if (playerHealth <= 60) { c1 = 0xFFCC00; c2 = 0xAA8800; }
+        if (playerHealth <= 30) { c1 = 0xFF3300; c2 = 0x880000; }
         
-        healthBarGraphics.fillStyle(fillColor, 1);
-        healthBarGraphics.fillRoundedRect(x + 4, y + 4, fillW, h - 8, 6);
+        // Aplicar degradado vertical
+        healthBarGraphics.fillGradientStyle(c1, c1, c2, c2, 1);
+        healthBarGraphics.fillRoundedRect(x + 4, y + 4, fillW, h - 8, 8);
         
-        // Efecto Brillo (Gloss)
+        // Brillo superior para efecto cristal
         healthBarGraphics.fillStyle(0xFFFFFF, 0.2);
         healthBarGraphics.fillRoundedRect(x + 4, y + 4, fillW, (h - 8) / 2, 4);
     }
     
     if (healthBarText) {
-        healthBarText.setText(`${playerHealth}%`);
-        healthBarText.setX(x + w / 2); // Texto centrado sobre la barra
+        healthBarText.setText(`${playerHealth}% HP`);
+        healthBarText.setFontSize('22px'); // Texto más grande
+        healthBarText.setX(x + w / 2); 
         healthBarText.setY(y + h / 2);
         healthBarText.setDepth(3001);
-        healthBarText.setAlpha(1);
+        healthBarText.setStyle({ fill: '#FFF', stroke: '#000', strokeThickness: 4 }); // Contorno negro para legibilidad
         healthBarText.setVisible(true);
     }
 }
