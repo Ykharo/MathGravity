@@ -31,6 +31,13 @@
             max-width: 600px; /* Limitar el ancho en pantallas grandes para mantener look vertical */
             box-shadow: 0 0 20px rgba(0,0,0,0.5);
             background-color: #F57C00;
+            transition: background 0.5s ease;
+        }
+
+        /* Estrellas animadas para el Menú */
+        @keyframes scrollBackground {
+            from { background-position: 0 0; }
+            to { background-position: 0 1000px; }
         }
         
         canvas {
@@ -55,7 +62,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(230, 81, 0, 0.95);
+            background-color: #E65100;
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -63,6 +70,46 @@
             z-index: 3000;
             color: white;
             text-align: center;
+            transition: background 0.5s ease;
+        }
+
+        #main-menu.pro-bg {
+            background-color: #000 !important;
+            overflow: hidden;
+        }
+
+        /* Estrellas Parallax para el Menú */
+        .stars-container {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: none;
+            pointer-events: none;
+        }
+        #main-menu.pro-bg .stars-container { display: block; }
+
+        .star-layer {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-repeat: repeat;
+        }
+        .layer1 {
+            background-image: radial-gradient(1px 1px at 20px 30px, #fff, rgba(0,0,0,0));
+            background-size: 200px 200px;
+            animation: scrollBackground 30s linear infinite;
+            opacity: 0.8;
+        }
+        .layer2 {
+            background-image: radial-gradient(1.5px 1.5px at 50px 70px, #fff, rgba(0,0,0,0));
+            background-size: 300px 300px;
+            animation: scrollBackground 20s linear infinite;
+            opacity: 0.5;
+        }
+        .layer3 {
+            background-image: radial-gradient(2px 2px at 100px 150px, #fff, rgba(0,0,0,0));
+            background-size: 400px 400px;
+            animation: scrollBackground 10s linear infinite;
+            opacity: 0.3;
         }
 
         .menu-btn {
@@ -83,6 +130,58 @@
         .menu-btn:hover {
             background-color: #0ff;
             color: #000;
+        }
+        /* Toggle Switch Estilo Pro */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+
+        .switch input { 
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #333;
+            transition: .4s;
+            border-radius: 34px;
+            border: 2px solid #0ff;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 22px;
+            width: 22px;
+            left: 4px;
+            bottom: 4px;
+            background-color: #0ff;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #4b0082;
+            border-color: #f0f;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(26px);
+            background-color: #f0f;
+        }
+
+        .mode-label {
+            font-family: monospace;
+            font-weight: bold;
+            font-size: 16px;
+            letter-spacing: 1px;
         }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
@@ -105,6 +204,11 @@
         var GLOBAL_ENEMY_FIRE_RATE = 2000; 
         var GLOBAL_ENEMY_BULLET_SPEED = 400;
         var GLOBAL_MISSILE_TURN = 0.1;
+        var GLOBAL_PLAYER_SCALE = 0.09;
+        var GLOBAL_ENEMY_SCALE = 0.11;
+        var GLOBAL_ENEMY_ELITE_SCALE = 0.12;
+        var GLOBAL_SHIELD_SCALE = 1.2;
+        var GLOBAL_SHIELD_ALPHA = 0.4;
         
         var audioCtx = null;
         function initAudio() {
@@ -190,6 +294,24 @@
             if (name === 'ShieldChance') window.GLOBAL_SHIELD_CHANCE = parseFloat(val);
             if (name === 'EnemyFireRate') window.GLOBAL_ENEMY_FIRE_RATE = parseInt(val);
             if (name === 'EnemyBulletSpeed') window.GLOBAL_ENEMY_BULLET_SPEED = parseInt(val);
+            if (name === 'PlayerScale') {
+                window.GLOBAL_PLAYER_SCALE = parseFloat(val);
+                if (window.player && window.USE_PRO_ASSETS) window.player.setScale(window.GLOBAL_PLAYER_SCALE);
+            }
+            if (name === 'EnemyScale') {
+                window.GLOBAL_ENEMY_SCALE = parseFloat(val);
+            }
+            if (name === 'EnemyEliteScale') {
+                window.GLOBAL_ENEMY_ELITE_SCALE = parseFloat(val);
+            }
+            if (name === 'ShieldScale') {
+                window.GLOBAL_SHIELD_SCALE = parseFloat(val);
+                if (window.shieldSprite) window.shieldSprite.setScale(window.GLOBAL_SHIELD_SCALE * 0.5);
+            }
+            if (name === 'ShieldAlpha') {
+                window.GLOBAL_SHIELD_ALPHA = parseFloat(val);
+                if (window.shieldSprite) window.shieldSprite.setAlpha(window.GLOBAL_SHIELD_ALPHA);
+            }
         }
         
         function toggleRingVisible(cb) {
@@ -220,7 +342,31 @@
 </head>
 <body>
     <div id="main-menu">
-        <h1 style="font-size: 36px; text-shadow: 2px 2px 0px #000; margin-bottom: 40px; color: #fff;">MATH GRAVITY</h1>
+        <div class="stars-container">
+            <div class="star-layer layer1"></div>
+            <div class="star-layer layer2"></div>
+            <div class="star-layer layer3"></div>
+        </div>
+        <h1 style="font-size: 36px; text-shadow: 2px 2px 0px #000; margin-bottom: 20px; color: #fff; z-index: 10;">MATH GRAVITY</h1>
+        
+        <div style="margin-bottom: 30px; background: rgba(0,0,0,0.4); padding: 20px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.2); display: flex; flex-direction: column; align-items: center; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <span id="label-mode" class="mode-label" style="color: #0ff;">MODO GEOMÉTRICO</span>
+                <label class="switch">
+                    <input type="checkbox" id="toggle-pro-assets" onchange="
+                        window.USE_PRO_ASSETS = this.checked;
+                        document.getElementById('label-mode').innerText = this.checked ? 'MODO PROFESIONAL' : 'MODO GEOMÉTRICO';
+                        document.getElementById('label-mode').style.color = this.checked ? '#f0f' : '#0ff';
+                        document.getElementById('main-menu').className = this.checked ? 'pro-bg' : '';
+                        document.body.style.backgroundColor = this.checked ? '#000' : '#E65100';
+                        document.getElementById('game-container').style.backgroundColor = this.checked ? '#000' : '#F57C00';
+                    ">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <span style="font-size: 10px; color: rgba(255,255,255,0.5);">CAMBIA EL ESTILO VISUAL Y SONORO</span>
+        </div>
+
         <button class="menu-btn" onclick="startGameFromMenu(1)">1. MODO SECUENCIAL</button>
         <button class="menu-btn" onclick="startGameFromMenu(2)">2. ALEATORIO POR TABLA</button>
         <button class="menu-btn" onclick="startGameFromMenu(3)">3. SUPERVIVENCIA TOTAL</button>
@@ -337,6 +483,24 @@
 
         <label>Velocidad Bala Enemiga: <span id="valEnemyBulletSpeed">400</span></label><br>
         <input type="range" min="100" max="800" step="50" value="400" oninput="updatePhysVar('EnemyBulletSpeed', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+
+        <hr style="border: 0.5px solid #0FF; margin: 15px 0;">
+        <h5 style="margin: 0 0 10px 0;">Dimensiones de Naves (Modo Pro)</h5>
+        
+        <label>Escala Jugador: <span id="valPlayerScale">0.09</span></label><br>
+        <input type="range" min="0.05" max="0.5" step="0.01" value="0.09" oninput="updatePhysVar('PlayerScale', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+
+        <label>Escala Enemigos Básicos: <span id="valEnemyScale">0.11</span></label><br>
+        <input type="range" min="0.05" max="0.5" step="0.01" value="0.11" oninput="updatePhysVar('EnemyScale', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+
+        <label>Escala Enemigos Élite: <span id="valEnemyEliteScale">0.12</span></label><br>
+        <input type="range" min="0.05" max="0.5" step="0.01" value="0.12" oninput="updatePhysVar('EnemyEliteScale', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+
+        <label>Escala Escudo: <span id="valShieldScale">1.2</span></label><br>
+        <input type="range" min="0.5" max="3.0" step="0.1" value="1.2" oninput="updatePhysVar('ShieldScale', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+
+        <label>Transparencia Escudo: <span id="valShieldAlpha">0.4</span></label><br>
+        <input type="range" min="0.1" max="1.0" step="0.05" value="0.4" oninput="updatePhysVar('ShieldAlpha', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
     </div>
 
     <div id="game-container"></div>

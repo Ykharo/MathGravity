@@ -1,9 +1,14 @@
+// --- CONFIGURACIÓN DE ASSETS ---
+// Se controla dinámicamente desde el Menú Inicial en index.html
+var USE_PRO_ASSETS = window.USE_PRO_ASSETS || false; 
+// -------------------------------
+
 const config = {
     type: Phaser.AUTO,
     parent: 'game-container',
     width: window.innerWidth > 600 ? 600 : window.innerWidth, // Estilo mobile responsivo
     height: window.innerHeight,
-    backgroundColor: '#F57C00', // Fondo naranja
+    backgroundColor: window.USE_PRO_ASSETS ? '#000000' : '#F57C00', // Negro espacial o Naranja Clásico
     physics: {
         default: 'arcade',
         arcade: {
@@ -42,6 +47,7 @@ let hasShield = false;
 let shieldTimer = 0;
 let shieldGraphics = null;
 let shieldText = null;
+let shieldSprite = null;
 
 // Progreso de Juego
 let gameLevel = 1; 
@@ -87,20 +93,32 @@ function playTone(freq, type, duration) {
 }
 
 function playExplosion() {
-    playTone(100, 'square', 0.2);
-    setTimeout(() => playTone(50, 'sawtooth', 0.3), 50);
+    if (USE_PRO_ASSETS && window.gameScene && window.gameScene.sound.get('sfx_explosion')) {
+        window.gameScene.sound.play('sfx_explosion');
+    } else {
+        playTone(100, 'square', 0.2);
+        setTimeout(() => playTone(50, 'sawtooth', 0.3), 50);
+    }
 }
 
 function playSuccess() {
-    playTone(400, 'sine', 0.1);
-    setTimeout(() => playTone(600, 'sine', 0.2), 100);
+    if (USE_PRO_ASSETS && window.gameScene && window.gameScene.sound.get('sfx_success')) {
+        window.gameScene.sound.play('sfx_success');
+    } else {
+        playTone(400, 'sine', 0.1);
+        setTimeout(() => playTone(600, 'sine', 0.2), 100);
+    }
 }
 
 function playLevelUp() {
-    playTone(300, 'square', 0.1);
-    setTimeout(() => playTone(400, 'square', 0.1), 100);
-    setTimeout(() => playTone(500, 'square', 0.2), 200);
-    setTimeout(() => playTone(800, 'sine', 0.4), 300);
+    if (USE_PRO_ASSETS && window.gameScene && window.gameScene.sound.get('sfx_levelup')) {
+        window.gameScene.sound.play('sfx_levelup');
+    } else {
+        playTone(300, 'square', 0.1);
+        setTimeout(() => playTone(400, 'square', 0.1), 100);
+        setTimeout(() => playTone(500, 'square', 0.2), 200);
+        setTimeout(() => playTone(800, 'sine', 0.4), 300);
+    }
 }
 
 function speakText(text) {
@@ -128,13 +146,36 @@ let globalRingRotation = 0;
 let gapGrowths = [0, 0, 0, 0];
 
 function preload() {
-    // Al ser minimalista, no cargamos imágenes externas. Dibujaremos todo dinámicamente con Phaser Graphics.
-    // Pero para aprovechar el sistema de físicas y partículas de Phaser fácilmente,
-    // vamos a usar un truco: generamos texturas basándonos en gráficos dibujados en memoria.
+    // Siempre intentamos cargar archivos reales para que el switch del menú funcione al instante.
+    if (true) { 
+
+        // Imágenes (Sugerencia de nombres de archivo)
+        this.load.image('player_pro', 'assets/images/player.png');
+        this.load.image('enemy_pro', 'assets/images/enemy.png');
+        this.load.image('enemy_elite_pro', 'assets/images/enemy_elite.png');
+        this.load.image('shield_pro', 'assets/images/shield.png');
+        this.load.image('bullet_pro', 'assets/images/bullet.png');
+        this.load.image('missile_pro', 'assets/images/missile.png');
+        
+        // Audio
+        this.load.audio('sfx_explosion', 'assets/audio/explosion.mp3');
+        this.load.audio('sfx_success', 'assets/audio/success.mp3');
+        this.load.audio('sfx_levelup', 'assets/audio/levelup.mp3');
+        this.load.audio('music_main', 'assets/audio/background_music.mp3');
+    }
 }
 
 function create() {
     window.gameScene = this; // Exponer la capa de escena actual a la interfaz HTML
+    
+    // Sincronizar Modo con el Menú
+    USE_PRO_ASSETS = window.USE_PRO_ASSETS || false;
+    this.cameras.main.setBackgroundColor(USE_PRO_ASSETS ? '#000000' : '#F57C00');
+
+    // Música de Fondo (Solo si Pro Assets está activo)
+    if (USE_PRO_ASSETS && this.sound.get('music_main')) {
+        this.sound.play('music_main', { loop: true, volume: 0.4 });
+    }
     
     // Funciones Habilidad/UI
     this.togglePause = () => {
@@ -202,6 +243,36 @@ function create() {
         pendingTableSteps = [1,2,3,4,5,6,7,8,9,10];
         window.blockTypeMemory = {};
         
+        // Sincronización inmediata de Estilo Visual (Pro vs Clásico)
+        USE_PRO_ASSETS = window.USE_PRO_ASSETS || false;
+        this.cameras.main.setBackgroundColor(USE_PRO_ASSETS ? '#000000' : '#F57C00');
+        
+        // Actualizar textura y escala del jugador según el modo
+        let pKey = (USE_PRO_ASSETS && this.textures.exists('player_pro')) ? 'player_pro' : 'playerTex';
+        player.setTexture(pKey);
+        if (USE_PRO_ASSETS && this.textures.exists('player_pro')) {
+            player.setScale(window.GLOBAL_PLAYER_SCALE || 0.1);
+            player.body.setCircle(player.width * 0.4, player.width * 0.1, player.height * 0.1);
+        } else {
+            player.setScale(1.0);
+            player.body.setCircle(10, 0, 0);
+            player.clearTint();
+        }
+
+        // Re-inicializar estrellas si es necesario
+        if (this.starfield) this.starfield.forEach(s => s.obj.destroy());
+        this.starfield = [];
+        if (USE_PRO_ASSETS) {
+            for (let i = 0; i < 150; i++) {
+                let x = Phaser.Math.Between(0, config.width);
+                let y = Phaser.Math.Between(0, config.height);
+                let size = Phaser.Math.FloatBetween(0.5, 2.5);
+                let star = this.add.circle(x, y, size, 0xFFFFFF, Phaser.Math.FloatBetween(0.3, 1));
+                star.setDepth(-10);
+                this.starfield.push({ obj: star, speed: size * 0.5 });
+            }
+        }
+        
         score = 0;
         gameLevel = 1;
         playerHealth = 100;
@@ -252,14 +323,41 @@ function create() {
     // 1. Generar texturas personalizadas con gráficos puros desde memoria
     createCustomTextures(this);
 
+    // Actualizar variable local con el estado global del menú antes de empezar
+    USE_PRO_ASSETS = window.USE_PRO_ASSETS || false;
+
+    // 1.5 FONDO ESPACIAL (ESTRELLAS - Solo en Modo Pro)
+    this.starfield = [];
+    if (USE_PRO_ASSETS) {
+        for (let i = 0; i < 150; i++) {
+            let x = Phaser.Math.Between(0, config.width);
+            let y = Phaser.Math.Between(0, config.height);
+            let size = Phaser.Math.FloatBetween(0.5, 2.5);
+            let star = this.add.circle(x, y, size, 0xFFFFFF, Phaser.Math.FloatBetween(0.3, 1));
+            star.setDepth(-10);
+            this.starfield.push({
+                obj: star,
+                speed: size * 0.5
+            });
+        }
+    }
+
     // 2. Decoración de Fondo (Anillo punteado central)
     dibujarAnilloCentral(this);
 
     // 3. Crear al Jugador
-    player = this.physics.add.sprite(this.cameras.main.centerX, this.cameras.main.centerY + 150, 'playerTex');
+    let pKey = (USE_PRO_ASSETS && this.textures.exists('player_pro')) ? 'player_pro' : 'playerTex';
+    player = this.physics.add.sprite(this.cameras.main.centerX, this.cameras.main.centerY + 150, pKey);
+    
+    // AJUSTE DE ESCALA PARA ASSETS PRO
+    if (USE_PRO_ASSETS && this.textures.exists('player_pro')) {
+        player.setScale(window.GLOBAL_PLAYER_SCALE || 0.1);
+        player.body.setCircle(player.width * 0.4, player.width * 0.1, player.height * 0.1); 
+    } else {
+        player.body.setCircle(10, 0, 0); 
+    }
+    
     player.setCollideWorldBounds(true);
-    // Ajustar el hitbox (caja de colisión) un poco más pequeño para ser indulgente
-    player.body.setCircle(10, 0, 0); 
     player.setDamping(true);
     player.setDrag(window.GLOBAL_DRAG || 0.04); // Fluidez de arrastre, simula inercia
     player.setMaxVelocity(window.GLOBAL_MAX_VEL || 400);
@@ -315,8 +413,11 @@ function create() {
     this.physics.add.collider(player, enemiesGroup, hitEnemy, null, this);
     
     // Armas (Modo 3)
-    bulletsGroup = this.physics.add.group({ defaultKey: 'bulletTex', maxSize: 50 });
-    missilesGroup = this.physics.add.group({ defaultKey: 'missileTex', maxSize: 50 });
+    let bulletKey = (USE_PRO_ASSETS && this.textures.exists('bullet_pro')) ? 'bullet_pro' : 'bulletTex';
+    let missileKey = (USE_PRO_ASSETS && this.textures.exists('missile_pro')) ? 'missile_pro' : 'missileTex';
+    
+    bulletsGroup = this.physics.add.group({ defaultKey: bulletKey, maxSize: 50 });
+    missilesGroup = this.physics.add.group({ defaultKey: missileKey, maxSize: 50 });
     radarGraphics = this.add.graphics();
     radarGraphics.setDepth(5);
     
@@ -324,7 +425,7 @@ function create() {
     this.physics.add.overlap(missilesGroup, enemiesGroup, hitEnemyWithWeapon, null, this);
     
     // Ignorar por completo la colisión física si el usuario apagó el muro en el Lab
-    this.physics.add.collider(player, ringGroup, null, () => window.GLOBAL_RING_VISIBLE !== false, this);
+    this.physics.add.collider(player, ringGroup, hitRingWall, () => window.GLOBAL_RING_VISIBLE !== false, this);
     this.physics.add.collider(enemiesGroup, ringGroup, null, () => window.GLOBAL_RING_VISIBLE !== false, this);
 
     // Colisión de Menú Top (Aceptar misión del bloque con rebote)
@@ -349,6 +450,10 @@ function create() {
     shieldGraphics = this.add.graphics();
     shieldText = this.add.text(0, 0, "", { fontSize: '18px', fill: '#0ff', fontStyle: 'bold' });
     shieldText.setOrigin(0.5);
+    
+    // Crear el sprite del escudo siempre, para que esté listo si se activa el modo pro
+    shieldSprite = this.add.sprite(0, 0, 'shield_pro');
+    shieldSprite.setVisible(false).setAlpha(0.4).setDepth(2).setScale(0.6); // Escala base visual
 
     // 8. Controles (Seguir el ratón / Dedo táctil)
     this.input.on('pointermove', function (pointer) {
@@ -378,6 +483,17 @@ function update() {
             timeDilation = 1.0;
             this.cameras.main.setBackgroundColor('#F57C00');
         }
+    }
+
+    // Movimiento del Fondo (Parallax Estrellas)
+    if (this.starfield && !isGamePaused) {
+        this.starfield.forEach(star => {
+            star.obj.y += star.speed * timeDilation;
+            if (star.obj.y > config.height) {
+                star.obj.y = 0;
+                star.obj.x = Phaser.Math.Between(0, config.width);
+            }
+        });
     }
 
     // Actualizar rotaciones físicas y visuales al mismo tiempo (perlas visibles circulares)
@@ -501,6 +617,9 @@ function update() {
             this.lastSonarTime = this.time.now;
             let sonar = this.add.circle(player.x, player.y, 10);
             sonar.setStrokeStyle(3, 0x00FF00, 0.4); 
+            // Ocultar indicador verde en modo Pro
+            if (USE_PRO_ASSETS) sonar.setVisible(false);
+            
             this.tweens.add({
                 targets: sonar,
                 radius: 150, // Alcanza exactamente el radio de evasión para que el jugador vea los bordes reales del escáner
@@ -594,11 +713,20 @@ function update() {
 
     // Actualizar visuales del SHIELD si está activo
     if (hasShield) {
-        shieldGraphics.clear();
-        shieldGraphics.lineStyle(3, 0x00FFFF, 1);
-        shieldGraphics.beginPath();
-        shieldGraphics.arc(player.x, player.y, 25, 0, Math.PI * 2);
-        shieldGraphics.strokePath();
+        if (USE_PRO_ASSETS && this.textures.exists('shield_pro') && shieldSprite) {
+            shieldGraphics.clear();
+            shieldSprite.setVisible(true);
+            shieldSprite.setPosition(player.x, player.y);
+            shieldSprite.setScale((window.GLOBAL_SHIELD_SCALE || 1.2) * 0.5);
+            shieldSprite.setAlpha(window.GLOBAL_SHIELD_ALPHA || 0.4);
+            shieldSprite.rotation += 0.02 * timeDilation;
+        } else {
+            shieldGraphics.clear();
+            shieldGraphics.lineStyle(3, 0x00FFFF, 1);
+            shieldGraphics.beginPath();
+            shieldGraphics.arc(player.x, player.y, 25, 0, Math.PI * 2);
+            shieldGraphics.strokePath();
+        }
         
         shieldText.setPosition(player.x, player.y - 45);
         
@@ -606,6 +734,7 @@ function update() {
         if (shieldTimer <= 0) {
             hasShield = false;
             shieldGraphics.clear();
+            if (shieldSprite) shieldSprite.setVisible(false);
             shieldText.setText("");
         } else {
             shieldText.setText((shieldTimer / 1000).toFixed(1) + "s");
@@ -615,8 +744,9 @@ function update() {
     // Lógica Evolutiva de Enemigos
     enemiesGroup.children.iterate(function (enemy) {
         if(enemy && enemy.active) {
-            // 1. IA DE DISPARO (Solo naves Rojas y score >= 6)
-            if (enemy.texture && enemy.texture.key === 'enemyShieldTex' && score >= 6) {
+            // 1. IA DE DISPARO (Solo naves Rojas/Elite y score >= 6)
+            let isElite = enemy.texture && (enemy.texture.key === 'enemyShieldTex' || enemy.texture.key === 'enemy_elite_pro');
+            if (isElite && score >= 6) {
                 let distToPlayer = Phaser.Math.Distance.Between(enemy.x, enemy.y, player.x, player.y);
                 let radarRange = 250;
                 if (distToPlayer < radarRange) {
@@ -644,10 +774,17 @@ function update() {
                         else if (score >= 7) numBullets = 2;
                         
                         for(let n=0; n<numBullets; n++) {
-                            let eb = enemyBulletsGroup.create(enemy.x, enemy.y, 'bulletTex');
+                            let spread = (n - (numBullets-1)/2) * 0.1;
+                            let ebKey = (USE_PRO_ASSETS && this.textures.exists('bullet_pro')) ? 'bullet_pro' : 'bulletTex';
+                            let eb = enemyBulletsGroup.create(enemy.x, enemy.y, ebKey);
                             if(eb) {
-                                eb.setTint(0xff0000); eb.body.setCircle(4);
-                                let spread = (n - (numBullets-1)/2) * 0.1;
+                                if (USE_PRO_ASSETS) {
+                                    eb.setScale(0.07); 
+                                    eb.rotation = forwardAngle + spread;
+                                } else {
+                                    eb.setTint(0xff0000);
+                                }
+                                eb.body.setCircle(4);
                                 let speed = window.GLOBAL_ENEMY_BULLET_SPEED || 400;
                                 this.physics.velocityFromRotation(forwardAngle + spread, speed, eb.body.velocity);
                                 this.time.delayedCall(2000, () => { if(eb.active) eb.destroy(); });
@@ -655,8 +792,14 @@ function update() {
                         }
                         if (score >= 10) {
                             this.time.delayedCall(200, () => {
-                                let em = enemyBulletsGroup.create(enemy.x, enemy.y, 'missileTex');
-                                if(em) { em.setTint(0xff00ff); this.physics.velocityFromRotation(forwardAngle, 250, em.body.velocity); this.time.delayedCall(4000, () => { if(em.active) em.destroy(); }); }
+                                let emKey = (USE_PRO_ASSETS && this.textures.exists('missile_pro')) ? 'missile_pro' : 'missileTex';
+                                let em = enemyBulletsGroup.create(enemy.x, enemy.y, emKey);
+                                if(em) { 
+                                    if (USE_PRO_ASSETS) em.setScale(0.1);
+                                    else em.setTint(0xff00ff); 
+                                    this.physics.velocityFromRotation(forwardAngle, 250, em.body.velocity); 
+                                    this.time.delayedCall(4000, () => { if(em.active) em.destroy(); }); 
+                                }
                             });
                         }
                     }
@@ -966,7 +1109,7 @@ function hitAnswerCoin(player, coin) {
         });
         
         // CONTROL DE PROGRESIÓN MODO 3
-        if (currentGameMode === 3 && score % 5 === 0 && score > 0) {
+        if (currentGameMode === 3 && score === 10) {
              gameLevel = 2;
              let lvlText = this.add.text(config.width/2, config.height/2, "¡RANGO ALCANZADO!\nENJAMBRE ACTIVADO", { fontSize: '40px', fill: '#00FFFF', align: 'center', fontStyle: 'bold', stroke: '#000', strokeThickness: 6 });
              lvlText.setOrigin(0.5);
@@ -1275,7 +1418,8 @@ function spawnEnemy(scene) {
          attempts++;
     } while (Phaser.Math.Distance.Between(player.x, player.y, x, y) < 150 && attempts < 50); 
 
-    let enemy = enemiesGroup.create(x, y, 'enemyTex');
+    let eKey = (USE_PRO_ASSETS && scene.textures.exists('enemy_pro')) ? 'enemy_pro' : 'enemyTex';
+    let enemy = enemiesGroup.create(x, y, eKey);
     enemy.body.setCircle(12, 0, 0); 
     // Restablecido a 1 para evitar loop infinito de colisiones exponenciales
     enemy.body.setBounce(1, 1); 
@@ -1283,20 +1427,34 @@ function spawnEnemy(scene) {
     // Asignación de Puntos de Vida y Escudo
     enemy.hp = 1;
     let enemyColor = 0x000000; // Negro por defecto
-    let baseScale = 1.0;
+    let baseScale = (USE_PRO_ASSETS && scene.textures.exists('enemy_pro')) ? (window.GLOBAL_ENEMY_SCALE || 0.1) : 1.0;
     
     if (currentGameMode === 3 && score >= 3) {
         let chance = (window.GLOBAL_SHIELD_CHANCE !== undefined) ? window.GLOBAL_SHIELD_CHANCE : 0.25;
         if (Math.random() < chance) {
             enemy.hp = 3;
-            enemy.setTexture('enemyShieldTex');
-            enemy.clearTint(); // Usa su color rojo natural
-            baseScale = 1.15; // 15% más grande
+            if (USE_PRO_ASSETS && scene.textures.exists('enemy_elite_pro')) {
+                enemy.setTexture('enemy_elite_pro');
+                baseScale = window.GLOBAL_ENEMY_ELITE_SCALE || 0.12; 
+            } else {
+                enemy.setTexture('enemyShieldTex');
+                enemy.clearTint(); // Usa su color rojo natural
+                baseScale = 1.15;
+            }
         } else {
-            enemy.setTint(enemyColor);
+            if (!USE_PRO_ASSETS || !scene.textures.exists('enemy_pro')) {
+                enemy.setTint(enemyColor);
+            }
         }
     } else {
-        enemy.setTint(enemyColor);
+        if (!USE_PRO_ASSETS || !scene.textures.exists('enemy_pro')) {
+            enemy.setTint(enemyColor);
+        }
+    }
+    
+    // Ajustar hitbox para enemigos pro
+    if (USE_PRO_ASSETS && scene.textures.exists('enemy_pro')) {
+        enemy.body.setCircle(enemy.width * 0.45, enemy.width * 0.05, enemy.height * 0.05);
     }
     
     let randomAngle = Phaser.Math.FloatBetween(0, Math.PI * 2);
@@ -1369,6 +1527,10 @@ function takeDamage(scene, amount) {
 }
 
 function updateShipTint() {
+    if (USE_PRO_ASSETS) {
+        player.clearTint();
+        return;
+    }
     if (currentGameMode === 3 && currentCannonAmmo > 0) {
         let maxAmmo = window.GLOBAL_CANNON_AMMO || 4;
         let ratio = currentCannonAmmo / maxAmmo;
@@ -1501,8 +1663,20 @@ function triggerGameOver(scene) {
     }, 500);
 }
 
-function hitRing(player, ringSegment) {
+function hitRingWall(player, ringSegment) {
     if(isGameOver) return;
+    
+    // Si estamos en Modo Pro, aumentamos la fuerza de rebote
+    if (window.USE_PRO_ASSETS) {
+        let bounceForce = 450;
+        let angle = Phaser.Math.Angle.Between(ringSegment.x, ringSegment.y, player.x, player.y);
+        player.body.setVelocity(Math.cos(angle) * bounceForce, Math.sin(angle) * bounceForce);
+        
+        // Pequeño efecto visual de impacto
+        let scene = ringSegment.scene;
+        let spark = scene.add.circle(player.x, player.y, 5, 0x00ffff);
+        scene.tweens.add({ targets: spark, scale: 4, alpha: 0, duration: 200, onComplete: () => spark.destroy() });
+    }
 }
 
 function dibujarAnilloCentral(scene) {
@@ -1580,8 +1754,16 @@ function fireCannons(scene) {
         let bx = player.x + Math.cos(baseAngle) * 20 + ox;
         let by = player.y + Math.sin(baseAngle) * 20 + oy;
         
-        let bullet = bulletsGroup.create(bx, by, 'bulletTex');
+        let bKey = (USE_PRO_ASSETS && scene.textures.exists('bullet_pro')) ? 'bullet_pro' : 'bulletTex';
+        let bullet = bulletsGroup.create(bx, by, bKey);
         if (bullet) {
+            if (USE_PRO_ASSETS) {
+                bullet.setScale(0.07); // Reducido a 0.07 como solicitado
+                bullet.rotation = baseAngle; 
+            } else {
+                bullet.setScale(1.0);
+                bullet.rotation = 0;
+            }
             bullet.body.setCircle(4);
             bullet.setVelocity(Math.cos(baseAngle) * bulletSpeed, Math.sin(baseAngle) * bulletSpeed);
             scene.time.delayedCall(2000, () => {
@@ -1607,8 +1789,11 @@ function fireMissiles(scene, target) {
     for (let i = 0; i < numMissiles; i++) {
         let mx = player.x + Phaser.Math.Between(-20, 20);
         let my = player.y + Phaser.Math.Between(-20, 20);
-        let missile = missilesGroup.create(mx, my, 'missileTex');
+        let mKey = (USE_PRO_ASSETS && scene.textures.exists('missile_pro')) ? 'missile_pro' : 'missileTex';
+        let missile = missilesGroup.create(mx, my, mKey);
         if (missile) {
+            if (USE_PRO_ASSETS) missile.setScale(0.1);
+            else missile.setScale(1.0);
             missile.target = target;
             missile.birthTime = scene.time.now;
             missile.randomOffset = Phaser.Math.FloatBetween(0, Math.PI * 2);
