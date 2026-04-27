@@ -58,7 +58,8 @@ let failedMath = []; // Listado de objetos { a, b, errors }
 
 // Nuevas variables Survival 
 let playerHealth = 100;
-let healthBarText;
+let healthBarGraphics; // Gráfico premium de vida
+let healthBarText; 
 let hasShield = false;
 let shieldTimer = 0;
 let shieldGraphics = null;
@@ -357,7 +358,6 @@ function create() {
         score = 0;
         gameLevel = 1;
         playerHealth = 100;
-        healthBarText.setText(obtenerVidaSegmentada(playerHealth));
         document.getElementById('score').innerText = score;
         
         player.setPosition(this.cameras.main.centerX, this.cameras.main.centerY + 150);
@@ -523,9 +523,11 @@ function create() {
         });
     }
     
-    // Textura dinámica UI de Vida a la izquierda (según pedido del usuario)
-    healthBarText = this.add.text(20, 90, obtenerVidaSegmentada(playerHealth), { fontSize: '18px', fill: '#FFF', fontStyle: 'bold', align: 'left', fontFamily: 'monospace' });
-    healthBarText.setOrigin(0, 0.5);
+    // Inicializar Gráficos de Vida (Premium)
+    healthBarGraphics = this.add.graphics().setDepth(2000);
+    healthBarText = this.add.text(0, 0, `${playerHealth}%`, { fontSize: '16px', fill: '#FFF', fontStyle: 'bold', align: 'center', fontFamily: 'monospace' });
+    healthBarText.setOrigin(0.5);
+    healthBarText.setDepth(2001);
     
     // Escudo visual base (Oculto)
     shieldGraphics = this.add.graphics();
@@ -590,10 +592,10 @@ function update() {
         config.width = currentGameWidth; 
         this.scale.resize(currentGameWidth, config.height);
         this.physics.world.setBounds(0, 0, currentGameWidth, config.height);
-        
-        // Reposicionar UI estática si existe
-        if (healthBarText) healthBarText.setX(20);
     }
+    
+    // Actualizar Barra de Vida Gráfica
+    actualizarBarraVidaGrafica(this);
     
     let currentRadius = config.width * (window.GLOBAL_RING_RADIUS_PCT !== undefined ? window.GLOBAL_RING_RADIUS_PCT : 0.15);
     let centerY = config.height / 2 + (currentRadius * 0.5); // 1/4 más abajo que antes (0.25 -> 0.5)
@@ -950,8 +952,6 @@ function update() {
             }
         });
     }
-
-    // Animación visual del anillo central o decoraciones se haría aquí
 }
 
 /** Funciones Lógicas del Juego **/
@@ -1148,10 +1148,6 @@ function hitAnswerCoin(player, coin) {
         // RECOMPENSAS RPG
         if (activeProblem.type === "HEAL") {
             playerHealth = 100;
-            // Titilar verde
-            healthBarText.setText(obtenerVidaSegmentada(playerHealth));
-            healthBarText.setTint(0x00FF00);
-            this.tweens.add({ targets: healthBarText, scale: 1.3, yoyo: true, repeat: 3, duration: 200, onComplete: () => { healthBarText.clearTint(); healthBarText.setScale(1); }});
         } 
         else if (activeProblem.type === "SHIELD") {
             hasShield = true;
@@ -1558,11 +1554,64 @@ function spawnEnemy(scene) {
     });
 }
 
+function actualizarBarraVidaGrafica(scene) {
+    if (!healthBarGraphics) return;
+    healthBarGraphics.clear();
+    
+    let w = 220; // Más ancho
+    let h = 24;
+    let x = config.width - w - 20;
+    let y = 120; // Misma altura que Armería en el lado opuesto
+    
+    // 1. Sombra/Brillo exterior
+    healthBarGraphics.lineStyle(4, 0x000000, 0.3);
+    healthBarGraphics.strokeRoundedRect(x + 2, y + 2, w, h, 6);
+    
+    // 2. Fondo del contenedor
+    healthBarGraphics.fillStyle(0x222222, 0.8);
+    healthBarGraphics.fillRoundedRect(x, y, w, h, 6);
+    
+    // 3. Borde Neon
+    let borderColor = playerHealth > 30 ? 0x00FFFF : 0xFF0055;
+    healthBarGraphics.lineStyle(2, borderColor, 1);
+    healthBarGraphics.strokeRoundedRect(x, y, w, h, 6);
+    
+    // 4. Relleno (Vida actual)
+    if (playerHealth > 0) {
+        let fillW = (playerHealth / 100) * (w - 4);
+        
+        // Gradiente lógico
+        let color = 0x00FF88; // Verde neon
+        if (playerHealth <= 60) color = 0xFFCC00; // Amarillo/Naranja
+        if (playerHealth <= 30) color = 0xFF3300; // Rojo
+        
+        healthBarGraphics.fillStyle(color, 1);
+        healthBarGraphics.fillRoundedRect(x + 2, y + 2, fillW, h - 4, 4);
+        
+        // Brillo interior (Glossy effect)
+        healthBarGraphics.fillStyle(0xFFFFFF, 0.2);
+        healthBarGraphics.fillRoundedRect(x + 2, y + 2, fillW, h / 2 - 2, 2);
+    }
+    
+    if (healthBarText) {
+        healthBarText.setText(`${playerHealth}%`);
+        healthBarText.setX(x + w / 2); // Centrado en la barra
+        healthBarText.setY(y + h / 2);
+        healthBarText.setFill('#FFF');
+        healthBarText.setShadow(1, 1, '#000', 2);
+    }
+    
+    // 5. Etiqueta "LIFE" o Corazón (Opcional pero vistoso)
+    healthBarGraphics.fillStyle(0xFFFFFF, 1);
+    // Dibujar un pequeño corazón o icono simple a la izquierda
+    let iconX = x - 25;
+    let iconY = y + h/2;
+    // ... (simplificado para no sobrecargar de dibujo manual, usaremos el texto para el porcentaje centrado)
+}
+
 function obtenerVidaSegmentada(hp) {
-    if (hp <= 0) return "[          ] 0%";
-    let bloques = Math.ceil(hp / 10);
-    let bar = "[" + "#".repeat(bloques) + " ".repeat(10 - bloques) + "]";
-    return `${bar} ${hp}%`;
+    let segs = Math.ceil(hp / 10);
+    return "❤️ " + "█".repeat(segs) + "░".repeat(10 - segs) + ` ${hp}%`;
 }
 
 function takeDamage(scene, amount) {
@@ -1594,7 +1643,8 @@ function takeDamage(scene, amount) {
     if (playerHealth < 0) playerHealth = 0;
     
     // Titilar rojo la UI de HP
-    healthBarText.setText(obtenerVidaSegmentada(playerHealth));
+    // Efecto visual en la nueva barra
+    healthBarText.setText(`${playerHealth}%`);
     healthBarText.setTint(0xff0000);
     scene.tweens.add({
         targets: healthBarText,
