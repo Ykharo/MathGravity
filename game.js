@@ -524,7 +524,7 @@ function create() {
     }
     
     // Textura dinámica UI de Vida a la izquierda (según pedido del usuario)
-    healthBarText = this.add.text(20, 30, obtenerVidaSegmentada(playerHealth), { fontSize: '18px', fill: '#FFF', fontStyle: 'bold', align: 'left', fontFamily: 'monospace' });
+    healthBarText = this.add.text(20, 60, obtenerVidaSegmentada(playerHealth), { fontSize: '18px', fill: '#FFF', fontStyle: 'bold', align: 'left', fontFamily: 'monospace' });
     healthBarText.setOrigin(0, 0.5);
     
     // Escudo visual base (Oculto)
@@ -963,7 +963,7 @@ function spawnSingleMathBlock(scene, i, forcedA = null, forcedB = null) {
     let totalWidth = (4 * blockWidth) + (3 * gap);
     let startX = (config.width - totalWidth) / 2;
     let x = startX + (i * (blockWidth + gap)) + (blockWidth / 2);
-    let y = 80; // Lo más arriba posible
+    let y = 110; // Bajamos un poco más para que no se corte en el notch/safe area
 
     let blockType = "NORMAL";
     let tex = 'blockTex_orange';
