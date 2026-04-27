@@ -425,11 +425,15 @@
             }
             if (name === 'TopOffset') {
                 window.GLOBAL_TOP_OFFSET = parseInt(val);
-                // Ajustar elementos HTML en tiempo real
                 let overlay = document.getElementById('ui-overlay');
                 let leftContainer = document.getElementById('ui-left-container');
                 if (overlay) overlay.style.top = (80 + window.GLOBAL_TOP_OFFSET) + 'px';
                 if (leftContainer) leftContainer.style.top = (120 + window.GLOBAL_TOP_OFFSET) + 'px';
+                
+                // Llamar a función de reposicionamiento en el motor del juego
+                if (window.gameScene && window.gameScene.repositionUI) {
+                    window.gameScene.repositionUI();
+                }
             }
         }
         

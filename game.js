@@ -227,6 +227,34 @@ function preload() {
 }
 
 function create() {
+    // Exponer función de reposicionamiento
+    this.repositionUI = () => {
+        actualizarBarraVidaGrafica(this);
+        if (mathBlocksGroup) {
+            mathBlocksGroup.getChildren().forEach(block => {
+                let i = block.mathData.index;
+                let blockWidth = 120;
+                let gap = 20;
+                let totalWidth = (4 * blockWidth) + (3 * gap);
+                let startX = (config.width - totalWidth) / 2;
+                let x = startX + (i * (blockWidth + gap)) + (blockWidth / 2);
+                let yBase = 140;
+                let newY = yBase + (window.GLOBAL_TOP_OFFSET || 0);
+                block.setY(newY);
+                if (block.linkedText) block.linkedText.setY(newY);
+                
+                // Re-aplicar el tween para que no se desfase
+                this.tweens.killTweensOf([block, block.linkedText]);
+                this.tweens.add({
+                    targets: [block, block.linkedText],
+                    y: newY - 5,
+                    duration: Phaser.Math.Between(1500, 2000),
+                    yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
+                });
+            });
+        }
+    };
+
     window.gameScene = this; // Exponer la capa de escena actual a la interfaz HTML
     
     // Sincronizar Modo con el Menú
