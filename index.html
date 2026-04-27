@@ -242,6 +242,12 @@
         }
 
         function startGameFromMenu(mode) {
+            // DESBLOQUEO MAESTRO: Forzar reanudación del contexto de audio de Phaser desde el evento del DOM
+            if (window.gameScene && window.gameScene.sound && window.gameScene.sound.context) {
+                window.gameScene.sound.context.resume();
+            }
+            if (window.GLOBAL_AUDIO_CTX) window.GLOBAL_AUDIO_CTX.resume();
+
             initAudio();
             document.getElementById('main-menu').style.display = 'none';
             document.getElementById('btn-back-menu').style.display = 'block';

@@ -78,47 +78,81 @@ let enemyRadarGraphics = null;
 let currentGameWidth = window.innerWidth > 600 ? 600 : window.innerWidth;
 
 // --- AUDIO SYSTEM (Oscillators & TTS) ---
-function playTone(freq, type, duration) {
-    if (!window.GLOBAL_AUDIO_CTX) return;
-    let osc = window.GLOBAL_AUDIO_CTX.createOscillator();
-    let gain = window.GLOBAL_AUDIO_CTX.createGain();
-    osc.type = type;
-    osc.frequency.setValueAtTime(freq, window.GLOBAL_AUDIO_CTX.currentTime);
-    gain.gain.setValueAtTime(0.1, window.GLOBAL_AUDIO_CTX.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.00001, window.GLOBAL_AUDIO_CTX.currentTime + duration);
-    osc.connect(gain);
-    gain.connect(window.GLOBAL_AUDIO_CTX.destination);
-    osc.start();
-    osc.stop(window.GLOBAL_AUDIO_CTX.currentTime + duration);
+function playTone(freq, type, duration, volume) {
+    if (!window.gameScene || !window.gameScene.sound.context) return;
+    try {
+        let ctx = window.gameScene.sound.context;
+        let osc = ctx.createOscillator();
+        let gain = ctx.createGain();
+        osc.type = type || 'sine';
+        osc.frequency.setValueAtTime(freq || 440, ctx.currentTime);
+        gain.gain.setValueAtTime(volume || 0.1, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + (duration || 0.1));
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + (duration || 0.1));
+    } catch (e) {
+        console.error("Error en playTone:", e);
+    }
 }
 
 function playExplosion() {
-    if (USE_PRO_ASSETS && window.gameScene && window.gameScene.sound.get('sfx_explosion')) {
-        window.gameScene.sound.play('sfx_explosion');
-    } else {
-        playTone(100, 'square', 0.2);
-        setTimeout(() => playTone(50, 'sawtooth', 0.3), 50);
+    if (window.gameScene && USE_PRO_ASSETS) {
+        try {
+            window.gameScene.sound.play('sfx_explosion', { volume: 0.5 });
+            return;
+        } catch (e) { console.warn("Fallo sfx_explosion", e); }
     }
+    playTone(150, 'sawtooth', 0.2);
 }
 
 function playSuccess() {
-    if (USE_PRO_ASSETS && window.gameScene && window.gameScene.sound.get('sfx_success')) {
-        window.gameScene.sound.play('sfx_success');
-    } else {
-        playTone(400, 'sine', 0.1);
-        setTimeout(() => playTone(600, 'sine', 0.2), 100);
+    if (window.gameScene && USE_PRO_ASSETS) {
+        try {
+            window.gameScene.sound.play('sfx_success', { volume: 0.5 });
+            return;
+        } catch (e) { console.warn("Fallo sfx_success", e); }
     }
+    playTone(880, 'sine', 0.1);
 }
 
 function playLevelUp() {
-    if (USE_PRO_ASSETS && window.gameScene && window.gameScene.sound.get('sfx_levelup')) {
-        window.gameScene.sound.play('sfx_levelup');
-    } else {
-        playTone(300, 'square', 0.1);
-        setTimeout(() => playTone(400, 'square', 0.1), 100);
-        setTimeout(() => playTone(500, 'square', 0.2), 200);
-        setTimeout(() => playTone(800, 'sine', 0.4), 300);
+    if (window.gameScene && USE_PRO_ASSETS) {
+        window.gameScene.sound.play('sfx_levelup', { volume: 0.6 });
+        return;
     }
+    playTone(523, 'square', 0.3);
+}
+
+function playLaser() {
+    if (window.gameScene && USE_PRO_ASSETS) {
+        try {
+            window.gameScene.sound.play('sfx_laser', { volume: 0.2 });
+            return;
+        } catch (e) { console.warn("Fallo sfx_laser", e); }
+    }
+    playTone(600, 'sine', 0.05);
+}
+
+function playMissileLaunch() {
+    if (window.gameScene && USE_PRO_ASSETS) {
+        try {
+            window.gameScene.sound.play('sfx_missile', { volume: 0.4 });
+            return;
+        } catch (e) { console.warn("Fallo sfx_missile", e); }
+    }
+    playTone(200, 'sawtooth', 0.2);
+}
+
+function playShieldSound() {
+    if (window.gameScene && USE_PRO_ASSETS) {
+        try {
+            window.gameScene.sound.play('sfx_shield', { volume: 0.5 });
+            return;
+        } catch (e) { console.warn("Fallo sfx_shield", e); }
+    }
+    playTone(400, 'sine', 0.3);
 }
 
 function speakText(text) {
@@ -161,7 +195,14 @@ function preload() {
         this.load.audio('sfx_explosion', 'assets/audio/explosion.mp3');
         this.load.audio('sfx_success', 'assets/audio/success.mp3');
         this.load.audio('sfx_levelup', 'assets/audio/levelup.mp3');
+        this.load.audio('sfx_laser', 'assets/audio/laser.mp3');
+        this.load.audio('sfx_missile', 'assets/audio/missile_launch.mp3');
+        this.load.audio('sfx_shield', 'assets/audio/shield.mp3');
         this.load.audio('music_main', 'assets/audio/background_music.mp3');
+        
+        this.load.on('loaderror', (file) => {
+            console.error('Error cargando asset:', file.src);
+        });
     }
 }
 
@@ -203,7 +244,13 @@ function create() {
             timeDilation = 0.05; // Pantano hiper-denso: Velocidad al 5%
             
             // Efecto visual global
-            this.cameras.main.setBackgroundColor('#404040');
+            // En Modo Pro usamos un efecto visual de estrellas neón en vez de filtro gris
+            if (USE_PRO_ASSETS) {
+                if (this.starfield) this.starfield.forEach(s => s.obj.setFillStyle(0xFF00FF)); // Estrellas Púrpuras
+                this.cameras.main.shake(200, 0.01);
+            } else {
+                this.cameras.main.setBackgroundColor('#888888');
+            }
             
             let singText = this.add.text(config.width/2, config.height/2, "¡SINGULARIDAD\nCREADA!", { fontSize: '40px', fill: '#FF00FF', align: 'center', fontStyle: 'bold', stroke: '#000', strokeThickness: 6 });
             singText.setOrigin(0.5);
@@ -246,6 +293,19 @@ function create() {
         // Sincronización inmediata de Estilo Visual (Pro vs Clásico)
         USE_PRO_ASSETS = window.USE_PRO_ASSETS || false;
         this.cameras.main.setBackgroundColor(USE_PRO_ASSETS ? '#000000' : '#F57C00');
+
+        // Desbloqueo de Audio
+        if (this.sound.context.state === 'suspended') {
+            this.sound.context.resume();
+        }
+        this.sound.mute = false;
+        this.sound.volume = 1;
+        playTone(440, 'sine', 0.5, 0.5); // PITIDO DE PRUEBA (LA 440Hz)
+
+        // Iniciar Música
+        if (USE_PRO_ASSETS) {
+            this.sound.play('music_main', { loop: true, volume: 0.4 });
+        }
         
         // Actualizar textura y escala del jugador según el modo
         let pKey = (USE_PRO_ASSETS && this.textures.exists('player_pro')) ? 'player_pro' : 'playerTex';
@@ -456,15 +516,19 @@ function create() {
     shieldSprite.setVisible(false).setAlpha(0.4).setDepth(2).setScale(0.6); // Escala base visual
 
     // 8. Controles (Seguir el ratón / Dedo táctil)
-    this.input.on('pointermove', function (pointer) {
+    this.audioStatusText = this.add.text(10, 10, "AUDIO: CARGANDO...", { fontSize: '12px', fill: '#0f0', fontFamily: 'monospace' }).setScrollFactor(0).setDepth(10000);
+    
+    this.input.on('pointerdown', function (pointer) {
+        if (this.sound.context.state === 'suspended') {
+            this.sound.context.resume();
+        }
         if (!isGameOver) {
             targetX = pointer.x;
             targetY = pointer.y;
         }
     }, this);
     
-    // Al hacer click/touch se actualiza el target si se está jugando
-    this.input.on('pointerdown', function (pointer) {
+    this.input.on('pointermove', function (pointer) {
         if (!isGameOver) {
             targetX = pointer.x;
             targetY = pointer.y;
@@ -473,6 +537,14 @@ function create() {
 }
 
 function update() {
+    // Actualizar estado de audio en pantalla
+    if (this.audioStatusText) {
+        let state = this.sound.context.state;
+        let musicStatus = (USE_PRO_ASSETS && this.sound.get('music_main')) ? (this.sound.get('music_main').isPlaying ? "🎵" : "🔇") : "❌";
+        this.audioStatusText.setText(`AUDIO: ${state.toUpperCase()} ${musicStatus}`);
+        this.audioStatusText.setFill(state === 'running' ? '#0f0' : '#f00');
+    }
+
     if (isGameOver) return;
 
     // Control Temporal (Singularidad)
@@ -481,7 +553,8 @@ function update() {
         if (singularityTimer <= 0) {
             singularityActive = false;
             timeDilation = 1.0;
-            this.cameras.main.setBackgroundColor('#F57C00');
+            // Restaurar estrellas a blanco
+            if (this.starfield) this.starfield.forEach(s => s.obj.setFillStyle(0xFFFFFF));
         }
     }
 
@@ -1485,7 +1558,7 @@ function takeDamage(scene, amount) {
         playerShieldCharges--;
         
         // Efecto visual instantáneo del escudo
-        playTone(600, 'sine', 0.1);
+        playShieldSound();
         let reactionShield = scene.add.circle(player.x, player.y, 40);
         reactionShield.setStrokeStyle(4, 0x00FFFF, 1);
         scene.tweens.add({
@@ -1736,7 +1809,7 @@ function fireCannons(scene) {
     currentCannonAmmo--;
     updateShipTint();
     lastFireTime = scene.time.now;
-    playTone(800, 'square', 0.1);
+    playLaser();
     
     let bulletSpeed = window.GLOBAL_BULLET_SPEED || 800;
     let cannonOffsets = [];
@@ -1782,7 +1855,7 @@ function fireMissiles(scene, target) {
     currentMissileAmmo--;
     updateShipTint();
     lastMissileTime = scene.time.now;
-    playTone(300, 'sawtooth', 0.2);
+    playMissileLaunch();
     
     let numMissiles = (score >= 9) ? 4 : 2;
     
