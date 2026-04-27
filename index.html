@@ -24,14 +24,88 @@
             font-family: 'Inter', sans-serif;
         }
 
-        /* Contenedor del juego para mantener el aspect ratio en PC y Mobile */
+        /* Contenedor del juego - Optimizado para Landscape/iPad */
         #game-container {
             width: 100%;
             height: 100%;
-            max-width: 600px; /* Limitar el ancho en pantallas grandes para mantener look vertical */
+            /* Eliminamos el max-width para permitir modo apaisado completo */
             box-shadow: 0 0 20px rgba(0,0,0,0.5);
             background-color: #F57C00;
             transition: background 0.5s ease;
+        }
+
+        /* Estilo Premium para el Slider de Volumen */
+        .volume-container {
+            margin: 20px 0;
+            width: 80%;
+            max-width: 300px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            z-index: 10;
+        }
+
+        .volume-slider-wrapper {
+            position: relative;
+            width: 100%;
+            height: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            overflow: hidden;
+        }
+
+        .volume-slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 100%;
+            background: transparent;
+            outline: none;
+            cursor: pointer;
+            position: absolute;
+            top: 0;
+            left: 0;
+            margin: 0;
+            z-index: 2;
+        }
+
+        .volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #fff;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.8);
+            border: 2px solid #0ff;
+            transition: transform 0.2s;
+        }
+
+        .volume-slider:active::-webkit-slider-thumb {
+            transform: scale(1.2);
+        }
+
+        .volume-progress {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            background: linear-gradient(90deg, #00f2fe 0%, #4facfe 100%);
+            width: 50%; /* Dinámico vía JS */
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .volume-label {
+            font-family: 'monospace';
+            font-size: 14px;
+            color: #0ff;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            text-shadow: 0 0 5px rgba(0, 255, 255, 0.5);
         }
 
         /* Estrellas animadas para el Menú */
@@ -226,6 +300,36 @@
                 window.speechSynthesis.speak(unlock);
             }
         }
+
+        function setGlobalVolume(val) {
+            window.GLOBAL_VOLUME = parseFloat(val);
+            localStorage.setItem('mathGravVolume', val);
+            
+            // Actualizar Phaser si está listo
+            if (window.gameScene && window.gameScene.sound) {
+                window.gameScene.sound.volume = window.GLOBAL_VOLUME;
+            }
+            
+            // Actualizar visual de los sliders
+            const sliders = document.querySelectorAll('.volume-slider');
+            const progressBars = document.querySelectorAll('.volume-progress');
+            const labels = document.querySelectorAll('.volume-val-label');
+            
+            sliders.forEach(s => s.value = val);
+            progressBars.forEach(p => p.style.width = (val * 100) + '%');
+            labels.forEach(l => l.innerText = Math.round(val * 100) + '%');
+        }
+
+        // Cargar volumen al inicio
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedVol = localStorage.getItem('mathGravVolume') || 0.5;
+            setGlobalVolume(savedVol);
+
+            // Inicializar ancho del lab
+            const gameWidth = window.innerWidth;
+            document.getElementById('valGameWidth').innerText = gameWidth;
+            document.getElementById('sliderGameWidth').value = gameWidth;
+        });
         
         function updateValidTables() {
             let active = [];
@@ -376,6 +480,17 @@
             <span style="font-size: 10px; color: rgba(255,255,255,0.5);">CAMBIA EL ESTILO VISUAL Y SONORO</span>
         </div>
 
+        <div class="volume-container">
+            <div style="display: flex; justify-content: space-between; width: 100%; margin-bottom: 5px;">
+                <span class="volume-label">VOLUMEN MAESTRO</span>
+                <span class="volume-label volume-val-label">50%</span>
+            </div>
+            <div class="volume-slider-wrapper">
+                <input type="range" min="0" max="1" step="0.01" value="0.5" class="volume-slider" oninput="setGlobalVolume(this.value)">
+                <div class="volume-progress"></div>
+            </div>
+        </div>
+
         <button class="menu-btn" onclick="startGameFromMenu(1)">1. MODO SECUENCIAL</button>
         <button class="menu-btn" onclick="startGameFromMenu(2)">2. ALEATORIO POR TABLA</button>
         <button class="menu-btn" onclick="startGameFromMenu(3)">3. SUPERVIVENCIA TOTAL</button>
@@ -434,6 +549,14 @@
             <label><input type="checkbox" id="chkTable9" checked onchange="updateValidTables()"> 9</label>
             <label><input type="checkbox" id="chkTable10" onchange="updateValidTables()"> 10</label>
         </div>
+
+        <div style="margin-bottom: 20px;">
+            <label style="color: #0ff;">Volumen: <span class="volume-val-label">50%</span></label>
+            <div class="volume-slider-wrapper" style="height: 8px; margin-top: 5px;">
+                <input type="range" min="0" max="1" step="0.01" value="0.5" class="volume-slider" oninput="setGlobalVolume(this.value)">
+                <div class="volume-progress"></div>
+            </div>
+        </div>
         
         <label>Aceleración (Fondo Trasero): <span id="valTension">0.5</span></label><br>
         <input type="range" min="0.5" max="30" step="0.5" value="0.5" oninput="updatePhysVar('Tension', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
@@ -450,8 +573,8 @@
         <label>Límite Velocidad Max: <span id="valMaxVel">150</span></label><br>
         <input type="range" min="50" max="1500" step="50" value="150" oninput="updatePhysVar('MaxVel', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
 
-        <label>Ancho del Juego (Fondo Naranja): <span id="valGameWidth">600</span></label><br>
-        <input type="range" min="300" max="2500" step="50" value="600" oninput="updatePhysVar('GameWidth', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+        <label>Ancho del Juego (Fondo Naranja): <span id="valGameWidth">---</span></label><br>
+        <input type="range" id="sliderGameWidth" min="300" max="2500" step="50" value="600" oninput="updatePhysVar('GameWidth', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
 
         <label>Radio Muro Energía (Multiplicador): <span id="valRingRadius">0.25</span></label><br>
         <input type="range" min="0.1" max="0.8" step="0.05" value="0.25" oninput="updatePhysVar('RingRadius', this.value)" style="width: 100%; margin-bottom: 10px;"><br>

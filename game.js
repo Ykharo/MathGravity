@@ -22,7 +22,7 @@ var USE_PRO_ASSETS = window.USE_PRO_ASSETS || false;
 const config = {
     type: Phaser.AUTO,
     parent: 'game-container',
-    width: window.innerWidth > 600 ? 600 : window.innerWidth, // Estilo mobile responsivo
+    width: window.innerWidth, // Permitir ancho completo para modo apaisado en iPad
     height: window.innerHeight,
     backgroundColor: window.USE_PRO_ASSETS ? '#000000' : '#F57C00', // Negro espacial o Naranja Clásico
     physics: {
@@ -91,7 +91,7 @@ let enemyBulletsGroup;
 let enemyRadarGraphics = null;
 
 // Ancho dinámico del juego
-let currentGameWidth = window.innerWidth > 600 ? 600 : window.innerWidth;
+let currentGameWidth = window.innerWidth;
 
 // --- AUDIO SYSTEM (Oscillators & TTS) ---
 function playTone(freq, type, duration, volume) {
@@ -100,9 +100,12 @@ function playTone(freq, type, duration, volume) {
         let ctx = window.gameScene.sound.context;
         let osc = ctx.createOscillator();
         let gain = ctx.createGain();
+        let volBase = window.GLOBAL_VOLUME !== undefined ? window.GLOBAL_VOLUME : 0.5;
+        let finalVol = (volume || 0.1) * volBase;
+        
         osc.type = type || 'sine';
         osc.frequency.setValueAtTime(freq || 440, ctx.currentTime);
-        gain.gain.setValueAtTime(volume || 0.1, ctx.currentTime);
+        gain.gain.setValueAtTime(finalVol, ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + (duration || 0.1));
         osc.connect(gain);
         gain.connect(ctx.destination);
@@ -226,8 +229,10 @@ function create() {
     window.gameScene = this; // Exponer la capa de escena actual a la interfaz HTML
     
     // Sincronizar Modo con el Menú
-    USE_PRO_ASSETS = window.USE_PRO_ASSETS || false;
     this.cameras.main.setBackgroundColor(USE_PRO_ASSETS ? '#000000' : '#F57C00');
+
+    // Sincronizar Volumen Global
+    this.sound.volume = window.GLOBAL_VOLUME !== undefined ? window.GLOBAL_VOLUME : 0.5;
 
     // Música de Fondo (Solo si Pro Assets está activo)
     if (USE_PRO_ASSETS && this.sound.get('music_main')) {
