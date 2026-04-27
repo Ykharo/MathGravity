@@ -321,6 +321,7 @@
             labels.forEach(l => l.innerText = Math.round(val * 100) + '%');
         }
 
+        window.addEventListener('DOMContentLoaded', () => {
             const savedVol = localStorage.getItem('mathGravVolume') || 0.5;
             setGlobalVolume(savedVol);
 
