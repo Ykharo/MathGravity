@@ -118,16 +118,43 @@
             display: block;
         }
 
-        #ui-overlay {
+        /* Barra superior unificada para evitar solapamientos */
+        #top-bar {
             position: absolute;
             top: 20px;
+            left: 0;
             width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding: 0 20px;
+            box-sizing: border-box;
+            z-index: 2000;
+            pointer-events: none;
+        }
+
+        .top-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: auto;
+        }
+
+        .top-group-right {
+            align-items: flex-end;
+        }
+
+        #ui-overlay {
+            position: relative; /* Cambiado de absolute para ser parte del flex */
+            top: 0;
+            flex-grow: 1;
             text-align: center;
             color: white;
             font-size: 24px;
             font-weight: bold;
             pointer-events: none;
             text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+            margin-top: 10px;
         }
 
         #main-menu {
@@ -496,18 +523,31 @@
         <button class="menu-btn" onclick="startGameFromMenu(3)">3. SUPERVIVENCIA TOTAL</button>
     </div>
 
-    <button id="btn-back-menu" onclick="returnToMenu()" style="position: absolute; top: 20px; left: 20px; z-index: 2000; font-family: monospace; font-size: 16px; cursor: pointer; color: #fff; background: rgba(0,0,0,0.6); padding: 8px 15px; border-radius: 8px; border: 1px solid #fff; display: none;">
-        🔙 MENÚ
-    </button>
+    <div id="top-bar">
+        <div class="top-group">
+            <button id="btn-back-menu" onclick="returnToMenu()" style="font-family: monospace; font-size: 16px; cursor: pointer; color: #fff; background: rgba(0,0,0,0.6); padding: 8px 15px; border-radius: 8px; border: 1px solid #fff; display: none;">
+                🔙 MENÚ
+            </button>
+            <button id="btn-pause" onclick="togglePause()" style="font-family: monospace; font-size: 20px; cursor: pointer; color: #fff; background: rgba(0,0,0,0.6); padding: 8px 15px; border-radius: 8px; border: 1px solid #fff;">
+                ⏸ PAUSA
+            </button>
+        </div>
 
-    <button id="btn-pause" onclick="togglePause()" style="position: absolute; top: 80px; left: 20px; z-index: 2000; font-family: monospace; font-size: 20px; cursor: pointer; color: #fff; background: rgba(0,0,0,0.6); padding: 8px 15px; border-radius: 8px; border: 1px solid #fff;">
-        ⏸ PAUSA
-    </button>
+        <div id="ui-overlay">
+            <span>Puntuación: <span id="score">0</span></span>
+        </div>
 
-    <div id="ui-overlay">
-        <span>Puntuación: <span id="score">0</span></span>
+        <div class="top-group top-group-right">
+            <div style="display: flex; gap: 10px;">
+                <button onclick="toggleArmeria()" style="font-size: 20px; cursor: pointer; background: rgba(0,20,40,0.6); color: #0FF; border: 1px solid #0FF; border-radius: 8px; padding: 8px; font-family: monospace;">
+                    🔫 ARMERÍA
+                </button>
+                <button onclick="toggleLab()" style="font-size: 20px; cursor: pointer; background: rgba(0,0,0,0.6); color: white; border: 1px solid white; border-radius: 8px; padding: 8px; font-family: monospace;">
+                    ⚙️ LAB
+                </button>
+            </div>
+        </div>
     </div>
-    
     <div style="position: absolute; bottom: 20px; right: 20px; z-index: 2000; display: flex; flex-direction: column; align-items: flex-end; gap: 10px;">
         <button id="btn-singularity" onclick="activateSingularity()" style="font-family: monospace; font-size: 16px; font-weight: bold; cursor: pointer; color: #888; background: rgba(0,0,0,0.8); padding: 8px 15px; border-radius: 8px; border: 2px solid #555; pointer-events: none; transition: all 0.3s; display: none;">
             NUCLEO TEMPORAL: 0/3
@@ -521,15 +561,6 @@
             " style="transform: scale(1.5); margin-right: 12px; cursor: pointer;">
             Auto-Piloto Evasivo
         </label>
-    </div>
-    
-    <div style="position: absolute; top: 20px; right: 20px; z-index: 2000; display: flex; gap: 10px;">
-        <button onclick="toggleArmeria()" style="font-size: 20px; cursor: pointer; background: rgba(0,0,0,0.6); color: #0FF; border: 1px solid #0FF; border-radius: 8px; padding: 8px; font-family: monospace;">
-            🔫 ARMERÍA
-        </button>
-        <button onclick="toggleLab()" style="font-size: 20px; cursor: pointer; background: rgba(0,0,0,0.6); color: white; border: 1px solid white; border-radius: 8px; padding: 8px; font-family: monospace;">
-            ⚙️ LAB
-        </button>
     </div>
 
     <!-- PANEL DE DEBUG PROVISORIO -->
@@ -576,8 +607,8 @@
         <label>Ancho del Juego (Fondo Naranja): <span id="valGameWidth">---</span></label><br>
         <input type="range" id="sliderGameWidth" min="300" max="2500" step="50" value="600" oninput="updatePhysVar('GameWidth', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
 
-        <label>Radio Muro Energía (Multiplicador): <span id="valRingRadius">0.25</span></label><br>
-        <input type="range" min="0.1" max="0.8" step="0.05" value="0.25" oninput="updatePhysVar('RingRadius', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+        <label>Radio Muro Energía (Multiplicador): <span id="valRingRadius">0.15</span></label><br>
+        <input type="range" min="0.1" max="0.8" step="0.05" value="0.15" oninput="updatePhysVar('RingRadius', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
         
         <label style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; color: #fff;">
             <input type="checkbox" checked onchange="toggleRingVisible(this)" style="transform: scale(1.3);">

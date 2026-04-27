@@ -595,7 +595,7 @@ function update() {
         if (healthBarText) healthBarText.setX(config.width - 20);
     }
     
-    let currentRadius = config.width * (window.GLOBAL_RING_RADIUS_PCT !== undefined ? window.GLOBAL_RING_RADIUS_PCT : 0.25);
+    let currentRadius = config.width * (window.GLOBAL_RING_RADIUS_PCT !== undefined ? window.GLOBAL_RING_RADIUS_PCT : 0.15);
     let centerY = config.height / 2 + (currentRadius * 0.25); // Offset hacia abajo un cuarto de radio
     Phaser.Actions.RotateAroundDistance(ringGroup.getChildren(), { x: config.width / 2, y: centerY }, rotAmount, currentRadius);
     
@@ -961,7 +961,7 @@ function spawnSingleMathBlock(scene, i, forcedA = null, forcedB = null) {
     let blockHeight = 50;
     let spacing = config.width / 4;
     let x = (spacing * i) + (spacing / 2);
-    let y = 90; 
+    let y = 160; // Bajamos el spawn para que no tape los botones del top
 
     let blockType = "NORMAL";
     let tex = 'blockTex_orange';
@@ -1358,7 +1358,7 @@ function spawnAnswerCoins(scene, prob) {
 }
 
 function spawnSinglePearl(scene, rad, radius, arcoGrozor) {
-     let currentRadius = config.width * (window.GLOBAL_RING_RADIUS_PCT !== undefined ? window.GLOBAL_RING_RADIUS_PCT : 0.25);
+     let currentRadius = config.width * (window.GLOBAL_RING_RADIUS_PCT !== undefined ? window.GLOBAL_RING_RADIUS_PCT : 0.15);
      let centerY = config.height / 2 + (currentRadius * 0.25);
      let px = config.width / 2 + Math.cos(rad) * radius;
      let py = centerY + Math.sin(rad) * radius;
@@ -1764,7 +1764,7 @@ function hitRingWall(player, ringSegment) {
 }
 
 function dibujarAnilloCentral(scene) {
-    let currentRadius = config.width * (window.GLOBAL_RING_RADIUS_PCT !== undefined ? window.GLOBAL_RING_RADIUS_PCT : 0.25);
+    let currentRadius = config.width * (window.GLOBAL_RING_RADIUS_PCT !== undefined ? window.GLOBAL_RING_RADIUS_PCT : 0.15);
     let centerY = config.height / 2 + (currentRadius * 0.25);
     
     if (window.centralRingGraphic) window.centralRingGraphic.destroy();
