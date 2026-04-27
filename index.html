@@ -335,15 +335,18 @@
         }
 
         // PWA Offline Registration
-        if('serviceWorker' in navigator) {
+        // Service Worker desactivado para evitar problemas de caché en desarrollo
+        /*
+        if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js').then((reg) => {
-                    console.log('SW Registered: ', reg.scope);
-                }).catch((err) => {
-                    console.log('SW Registration FAILED: ', err);
+                navigator.serviceWorker.register('./sw.js').then(reg => {
+                    console.log('SW Registered:', reg.scope);
+                }).catch(err => {
+                    console.log('SW Error:', err);
                 });
             });
         }
+        */
     </script>
 </head>
 <body>

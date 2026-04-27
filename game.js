@@ -1,3 +1,19 @@
+/**
+ * MATH GRAVITY - PROFESSIONAL ARCADE EDITION
+ * 
+ * ARQUITECTURA DEL SISTEMA:
+ * 1. Modo Pro vs Clásico: Controlado por window.USE_PRO_ASSETS. Sincronizado en startGameMode().
+ * 2. Sistema de Audio Híbrido:
+ *    - playTone: Genera sonidos sintéticos para el modo Geométrico.
+ *    - Sound Manager: Reproduce archivos .mp3 (laser, explosion, music) para el modo Profesional.
+ *    - Desbloqueo: Requiere interacción de usuario (menú HTML o pointerdown) para activar el AudioContext en Safari/Chrome Mac.
+ * 3. Escalas Globales:
+ *    - Jugador: 0.09 | Enemigos: 0.11-0.12 | Balas: 0.07 | Misiles: 0.1
+ * 4. Efectos Visuales Pro:
+ *    - Fondo: Negro con estrellas parallax.
+ *    - Singularidad: Estrellas púrpura neón y cámara lenta (Time Warp).
+ */
+
 // --- CONFIGURACIÓN DE ASSETS ---
 // Se controla dinámicamente desde el Menú Inicial en index.html
 var USE_PRO_ASSETS = window.USE_PRO_ASSETS || false; 
@@ -516,8 +532,6 @@ function create() {
     shieldSprite.setVisible(false).setAlpha(0.4).setDepth(2).setScale(0.6); // Escala base visual
 
     // 8. Controles (Seguir el ratón / Dedo táctil)
-    this.audioStatusText = this.add.text(10, 10, "AUDIO: CARGANDO...", { fontSize: '12px', fill: '#0f0', fontFamily: 'monospace' }).setScrollFactor(0).setDepth(10000);
-    
     this.input.on('pointerdown', function (pointer) {
         if (this.sound.context.state === 'suspended') {
             this.sound.context.resume();
@@ -537,14 +551,6 @@ function create() {
 }
 
 function update() {
-    // Actualizar estado de audio en pantalla
-    if (this.audioStatusText) {
-        let state = this.sound.context.state;
-        let musicStatus = (USE_PRO_ASSETS && this.sound.get('music_main')) ? (this.sound.get('music_main').isPlaying ? "🎵" : "🔇") : "❌";
-        this.audioStatusText.setText(`AUDIO: ${state.toUpperCase()} ${musicStatus}`);
-        this.audioStatusText.setFill(state === 'running' ? '#0f0' : '#f00');
-    }
-
     if (isGameOver) return;
 
     // Control Temporal (Singularidad)
