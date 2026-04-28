@@ -338,11 +338,20 @@ function startMathVoiceListening(scene, block) {
             const heardCorrectAnswer = alternatives.some(alt => {
                 return window.MathSpeech.isSpokenAnswerCorrect(alt.transcript, activeProblem.result);
             });
+            const spokenAnswer = alternatives
+                .map(alt => window.MathSpeech.parseSpanishNumber(alt.transcript))
+                .find(answer => answer !== null);
 
             stopMathVoiceListening();
             if (heardCorrectAnswer) {
+                activeProblem.answerMethod = 'voice';
                 startLightSpeedTravel(scene);
             } else {
+                recordLearningAttempt(scene, activeProblem, {
+                    correct: false,
+                    method: 'voice',
+                    answer: spokenAnswer
+                });
                 showIncorrectVoiceAnswer(scene);
             }
         };
@@ -434,6 +443,7 @@ function startLightSpeedTravel(scene) {
             createArrivalSonar(scene, correctCoin.x, correctCoin.y);
 
             if (correctCoin.active) {
+                correctCoin.answerMethod = 'voice';
                 hitAnswerCoin.call(scene, player, correctCoin);
             }
         }
@@ -443,6 +453,33 @@ function startLightSpeedTravel(scene) {
 let currentTableIndex = 0;
 let currentStep = 1;
 let pendingTableSteps = [];
+
+function recordLearningAttempt(scene, problem, event) {
+    if (!window.MathProgress || !problem) return;
+
+    const now = scene && scene.time ? scene.time.now : null;
+    const startedAt = Number.isFinite(problem.progressStartedAt) ? problem.progressStartedAt : null;
+    const responseMs = Number.isFinite(event.responseMs)
+        ? event.responseMs
+        : (now !== null && startedAt !== null ? Math.max(0, now - startedAt) : null);
+
+    try {
+        window.MathProgress.recordAttempt({
+            a: problem.a,
+            b: problem.b,
+            correct: event.correct,
+            responseMs,
+            mode: currentGameMode,
+            method: event.method,
+            answer: event.answer,
+            profileId: window.ACTIVE_PROFILE_ID
+        }, {
+            profileId: window.ACTIVE_PROFILE_ID
+        });
+    } catch (e) {
+        console.warn('No se pudo registrar progreso matematico', e);
+    }
+}
 
 // Rastro y movimiento
 let targetX = 0;
@@ -788,7 +825,10 @@ function create() {
     
     // Balas enemigas
     enemyBulletsGroup = this.physics.add.group();
-    this.physics.add.overlap(player, enemyBulletsGroup, (p, b) => { b.destroy(); takeDamage(this, 10); }, null, this);
+    this.physics.add.overlap(player, enemyBulletsGroup, (p, b) => {
+        b.destroy();
+        takeDamage(this, getConfiguredDamage(window.GLOBAL_PROJECTILE_DAMAGE, 10));
+    }, null, this);
     
     enemyRadarGraphics = this.add.graphics();
 
@@ -1434,6 +1474,8 @@ function hitMathBlock(player, block) {
     
     currentPhase = "WAITING_ANSWER";
     activeProblem = block.mathData;
+    activeProblem.progressStartedAt = this.time.now;
+    activeProblem.answerMethod = 'coin';
     speakText(`¿Cuánto es ${activeProblem.a} por ${activeProblem.b}?`);
     
     // Tintinar el bloque elegido permanentemente
@@ -1479,6 +1521,11 @@ function hitAnswerCoin(player, coin) {
 
     if (coin.isCorrect) {
         // --- RESPUESTA CORRECTA ---
+        recordLearningAttempt(this, activeProblem, {
+            correct: true,
+            method: coin.answerMethod || activeProblem.answerMethod || 'coin',
+            answer: coin.value
+        });
         playSuccess();
         speakText(`¡Correcto!, ${activeProblem.a} por ${activeProblem.b} es ${activeProblem.result}`);
         
@@ -1629,6 +1676,11 @@ function hitAnswerCoin(player, coin) {
 
     } else {
         // --- RESPUESTA FALSA ---
+        recordLearningAttempt(this, activeProblem, {
+            correct: false,
+            method: coin.answerMethod || activeProblem.answerMethod || 'coin',
+            answer: coin.value
+        });
         playExplosion();
         this.cameras.main.shake(100, 0.01); 
         
@@ -1699,6 +1751,7 @@ function spawnAnswerCoins(scene, prob) {
         coin.body.setCircle(15);
         coin.setPushable(false); // fisica dura al chocar malo
         coin.isCorrect = (answers[i] === prob.result);
+        coin.value = answers[i];
         
         scene.tweens.add({
             targets: coin,
@@ -1945,6 +1998,7 @@ function clearSatelliteChallenge(scene, fade = false) {
 function spawnSatelliteChallenge(scene) {
     clearSatelliteChallenge(scene);
     const challenge = window.SatelliteDefense.chooseChallenge(failedMath, undefined, satelliteChallengeIndex);
+    challenge.progressStartedAt = scene.time.now;
     const options = window.SatelliteDefense.generateAnswerOptions(challenge.result);
     satelliteChallengeIndex++;
     satelliteChallengeActive = true;
@@ -1972,6 +2026,7 @@ function spawnSatelliteChallenge(scene) {
         coin.isSatelliteAnswer = true;
         coin.isCorrect = answer === challenge.result;
         coin.value = answer;
+        coin.challenge = challenge;
         coin.setDepth(3290);
 
         const txt = scene.add.text(coin.x, coin.y - 38, answer.toString(), {
@@ -2004,6 +2059,11 @@ function hitSatelliteAnswer(player, coin) {
     if (!satelliteChallengeActive || !coin.isSatelliteAnswer) return;
     satelliteChallengeActive = false;
     satelliteCharges = Math.max(0, satelliteCharges - 1);
+    recordLearningAttempt(this, coin.challenge, {
+        correct: coin.isCorrect,
+        method: 'satellite',
+        answer: coin.value
+    });
 
     if (coin.isCorrect) {
         playSuccess();
@@ -2334,6 +2394,11 @@ function obtenerVidaSegmentada(hp) {
     return "❤️ " + "█".repeat(segs) + "░".repeat(10 - segs) + ` ${hp}%`;
 }
 
+function getConfiguredDamage(value, fallbackAmount) {
+    const damage = Number.isFinite(Number(value)) ? Number(value) : fallbackAmount;
+    return Math.max(0, Math.round(damage));
+}
+
 function takeDamage(scene, amount) {
     // Escudo defensivo reactivo por cargas (Modo 3, 10+ respuestas)
     if (currentGameMode === 3 && score >= 10 && playerShieldCharges > 0) {
@@ -2467,7 +2532,7 @@ function hitEnemy(player, enemy) {
     player.body.setVelocity(bouncePoint.x, bouncePoint.y);
     // Para que no sigamos arrastrando al instante con el mouse, bloqueamos el target un instante si quisieramos
     // Pero el Lerp físico lo estabilizara rápido.
-    takeDamage(this, 20);
+    takeDamage(this, getConfiguredDamage(window.GLOBAL_COLLISION_DAMAGE, 20));
 }
 
 function triggerGameOver(scene) {

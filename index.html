@@ -205,6 +205,55 @@
             background-color: #0ff;
             color: #000;
         }
+
+        #main-menu.isabella-profile .menu-btn {
+            border-color: #ff66b3;
+            color: #ff9bd0;
+            text-shadow: 0 0 8px rgba(255, 102, 179, 0.55);
+        }
+
+        #main-menu.isabella-profile .menu-btn:hover {
+            background-color: #ff66b3;
+            color: #1b0010;
+        }
+
+        .mode-buttons-container {
+            width: 80%;
+            max-width: 340px;
+            margin-top: 28px;
+            padding-top: 26px;
+            border-top: 1px solid rgba(255, 255, 255, 0.26);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .profile-control {
+            margin-bottom: 18px;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            font-family: monospace;
+        }
+
+        .profile-control label {
+            color: #fff;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        #profile-selector {
+            min-width: 220px;
+            background: #111;
+            color: #0ff;
+            border: 2px solid #0ff;
+            border-radius: 8px;
+            padding: 12px 14px;
+            font-family: monospace;
+            font-size: 18px;
+            font-weight: bold;
+        }
         /* Toggle Switch Estilo Pro */
         .switch {
             position: relative;
@@ -282,6 +331,8 @@
         var GLOBAL_SHIELD_CHANCE = 0.25;
         var GLOBAL_ENEMY_FIRE_RATE = 2000; 
         var GLOBAL_ENEMY_BULLET_SPEED = 400;
+        var GLOBAL_COLLISION_DAMAGE = 20;
+        var GLOBAL_PROJECTILE_DAMAGE = 10;
         var GLOBAL_MISSILE_TURN = 0.1;
         var GLOBAL_PLAYER_SCALE = 0.09;
         var GLOBAL_ENEMY_SCALE = 0.11;
@@ -337,7 +388,38 @@
             // Aplicar offset inicial de -70
             updatePhysVar('TopOffset', -70);
             document.getElementById('sliderTopOffset').value = -70;
+            initLearningProfiles();
         });
+
+        function initLearningProfiles() {
+            if (!window.MathProgress) return;
+            const profiles = window.MathProgress.saveProfiles(window.MathProgress.loadProfiles());
+            const activeProfileId = window.MathProgress.setActiveProfileId(window.MathProgress.getActiveProfileId());
+            const selector = document.getElementById('profile-selector');
+            if (!selector) return;
+
+            selector.innerHTML = '';
+            profiles.forEach(profile => {
+                const option = document.createElement('option');
+                option.value = profile.id;
+                option.textContent = profile.name;
+                selector.appendChild(option);
+            });
+            selector.value = activeProfileId;
+            updateProfileMenuTheme(activeProfileId);
+        }
+
+        function setLearningProfile(profileId) {
+            if (!window.MathProgress) return;
+            window.ACTIVE_PROFILE_ID = window.MathProgress.setActiveProfileId(profileId);
+            updateProfileMenuTheme(window.ACTIVE_PROFILE_ID);
+        }
+
+        function updateProfileMenuTheme(profileId) {
+            const menu = document.getElementById('main-menu');
+            if (!menu) return;
+            menu.classList.toggle('isabella-profile', profileId === 'hija');
+        }
         
         function updateValidTables() {
             let active = [];
@@ -354,6 +436,11 @@
         }
 
         function startGameFromMenu(mode) {
+            if (window.MathProgress) {
+                const selector = document.getElementById('profile-selector');
+                window.ACTIVE_PROFILE_ID = window.MathProgress.setActiveProfileId(selector ? selector.value : window.ACTIVE_PROFILE_ID);
+            }
+
             // DESBLOQUEO MAESTRO: Forzar reanudación del contexto de audio de Phaser desde el evento del DOM
             if (window.gameScene && window.gameScene.sound && window.gameScene.sound.context) {
                 window.gameScene.sound.context.resume();
@@ -416,6 +503,8 @@
             if (name === 'ShieldChance') window.GLOBAL_SHIELD_CHANCE = parseFloat(val);
             if (name === 'EnemyFireRate') window.GLOBAL_ENEMY_FIRE_RATE = parseInt(val);
             if (name === 'EnemyBulletSpeed') window.GLOBAL_ENEMY_BULLET_SPEED = parseInt(val);
+            if (name === 'CollisionDamage') window.GLOBAL_COLLISION_DAMAGE = parseInt(val);
+            if (name === 'ProjectileDamage') window.GLOBAL_PROJECTILE_DAMAGE = parseInt(val);
             if (name === 'PlayerScale') {
                 window.GLOBAL_PLAYER_SCALE = parseFloat(val);
                 if (window.player && window.USE_PRO_ASSETS) window.player.setScale(window.GLOBAL_PLAYER_SCALE);
@@ -494,7 +583,7 @@
                         window.USE_PRO_ASSETS = this.checked;
                         document.getElementById('label-mode').innerText = this.checked ? 'MODO PROFESIONAL' : 'MODO GEOMÉTRICO';
                         document.getElementById('label-mode').style.color = this.checked ? '#f0f' : '#0ff';
-                        document.getElementById('main-menu').className = this.checked ? 'pro-bg' : '';
+                        document.getElementById('main-menu').classList.toggle('pro-bg', this.checked);
                         document.body.style.backgroundColor = this.checked ? '#000' : '#E65100';
                         document.getElementById('game-container').style.backgroundColor = this.checked ? '#000' : '#F57C00';
                     ">
@@ -515,9 +604,19 @@
             </div>
         </div>
 
-        <button class="menu-btn" onclick="startGameFromMenu(1)">1. MODO SECUENCIAL</button>
-        <button class="menu-btn" onclick="startGameFromMenu(2)">2. ALEATORIO POR TABLA</button>
-        <button class="menu-btn" onclick="startGameFromMenu(3)">3. SUPERVIVENCIA TOTAL</button>
+        <div class="profile-control">
+            <label for="profile-selector">PERFIL</label>
+            <select id="profile-selector" onchange="setLearningProfile(this.value)">
+                <option value="hija">Isabella</option>
+                <option value="dev">Desarrollador</option>
+            </select>
+        </div>
+
+        <div class="mode-buttons-container">
+            <button class="menu-btn" onclick="startGameFromMenu(1)">1. MODO SECUENCIAL</button>
+            <button class="menu-btn" onclick="startGameFromMenu(2)">2. ALEATORIO POR TABLA</button>
+            <button class="menu-btn" onclick="startGameFromMenu(3)">3. SUPERVIVENCIA TOTAL</button>
+        </div>
     </div>
 
     <div id="ui-overlay">
@@ -655,6 +754,12 @@
         <label>Velocidad Bala Enemiga: <span id="valEnemyBulletSpeed">400</span></label><br>
         <input type="range" min="100" max="800" step="50" value="400" oninput="updatePhysVar('EnemyBulletSpeed', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
 
+        <label>Daño por Choque: <span id="valCollisionDamage">20</span></label><br>
+        <input type="range" min="0" max="100" step="1" value="20" oninput="updatePhysVar('CollisionDamage', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+
+        <label>Daño por Proyectiles: <span id="valProjectileDamage">10</span></label><br>
+        <input type="range" min="0" max="100" step="1" value="10" oninput="updatePhysVar('ProjectileDamage', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+
         <hr style="border: 0.5px solid #0FF; margin: 15px 0;">
         <h5 style="margin: 0 0 10px 0;">Dimensiones de Naves (Modo Pro)</h5>
         
@@ -678,6 +783,7 @@
 
     <script src="src/core/mathSpeech.js"></script>
     <script src="src/core/satelliteDefense.js"></script>
+    <script src="src/core/mathProgress.js"></script>
     <script src="game.js"></script>
 </body>
 </html>

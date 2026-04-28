@@ -54,14 +54,88 @@ Reglas importantes:
 - Las multiplicaciones del satelite se eligen con historial de errores si existe; si no hay historial, se usa fallback estadistico dificil.
 - La cantidad de disparos, velocidad de giro, arco de zigzag y velocidad de zigzag son parametros ajustables en Armeria.
 
+### 3. Estadisticas de aprendizaje
+
+Se agrego seguimiento de progreso educativo con persistencia local y perfiles separados.
+
+Arquitectura:
+
+1. `src/core/mathProgress.js` es el modulo puro. No depende de Phaser.
+2. `game.js` solo registra eventos con `recordLearningAttempt`; no calcula estadisticas ni administra `localStorage`.
+3. `index.html` carga `mathProgress.js` antes de `game.js` y muestra el selector de perfil.
+4. `tests/mathProgress.test.js` cubre conteo de intentos, separacion de perfiles, export/import JSON y datos por multiplicacion.
+
+Datos registrados por multiplicacion:
+
+- intentos totales;
+- aciertos;
+- errores;
+- porcentaje de acierto;
+- tiempo promedio de respuesta;
+- fecha de ultimo intento;
+- fecha de ultimo acierto;
+- fecha de ultimo error;
+- racha de aciertos;
+- racha de errores;
+- metodo de respuesta: `coin`, `voice`, `satellite`;
+- respuestas incorrectas elegidas.
+
+Perfiles locales:
+
+- Perfil jugador: `hija`, mostrado en UI como `Isabella`.
+- Perfil desarrollador: `dev`, mostrado como `Desarrollador`.
+- Cada perfil usa una clave separada de `localStorage`, por ejemplo:
+  - `mathGravity.learningProgress.v1.profile.hija`
+  - `mathGravity.learningProgress.v1.profile.dev`
+- Se conserva el id interno `hija` para no perder estadisticas ya guardadas, aunque el nombre visible sea `Isabella`.
+
+Export/import JSON:
+
+- `MathProgress.exportProgressJson(null, { profileId: "hija" })`
+- `MathProgress.importProgressJson(json, { profileId: "hija" })`
+
+Acceso desde consola del navegador:
+
+```js
+MathProgress.loadProgress({ profileId: "hija" })
+MathProgress.loadProgress({ profileId: "dev" })
+MathProgress.exportProgressJson(null, { profileId: "hija" })
+```
+
+Integracion en el juego:
+
+- Al seleccionar un bloque matematico, `game.js` guarda el inicio de respuesta (`progressStartedAt`).
+- Al responder por moneda, voz o Satelite Defensa, `game.js` informa el intento al modulo puro.
+- La respuesta correcta por voz sigue terminando en `hitAnswerCoin`, por lo que no duplica recompensas.
+- La respuesta incorrecta por voz registra el intento incorrecto aunque no choque una moneda.
+- El Satelite Defensa registra su respuesta con metodo `satellite`, sin sumar score ni vida.
+
+Reglas importantes:
+
+- No mezclar persistencia directamente en `game.js`.
+- No usar las estadisticas para agregar ayudas arcade en modos 1 y 2.
+- Mantener perfiles locales simples; no hay login ni backend.
+- Si luego se necesita sincronizacion multi-dispositivo, migrar persistencia desde `localStorage` a un backend o `IndexedDB`, manteniendo la API de eventos.
+
+### 4. Controles de dano en Armeria
+
+Se agregaron controles para probar balance en vivo:
+
+- `Daño por Choque`: valor directo que se resta de vida al chocar con enemigos. Default `20`.
+- `Daño por Proyectiles`: valor directo que se resta de vida al recibir disparos enemigos. Default `10`.
+
+No son porcentajes ni multiplicadores. Si el slider dice `5`, se restan 5 puntos de vida.
+
 ## Archivos relevantes
 
 - `src/core/mathSpeech.js`: modulo puro para normalizar texto hablado, convertir numeros en espanol y comparar contra la respuesta esperada.
 - `src/core/satelliteDefense.js`: modulo puro para elegir multiplicaciones dificiles y generar opciones de respuesta del satelite.
-- `game.js`: integracion con Phaser, reconocimiento de voz, viaje luminico, Satelite Defensa, efectos visuales, congelamiento de nave y sonar.
-- `index.html`: carga modulos puros antes de `game.js` y expone parametros de Armeria/Lab.
+- `src/core/mathProgress.js`: modulo puro para estadisticas de aprendizaje, perfiles locales, localStorage y export/import JSON.
+- `game.js`: integracion con Phaser, reconocimiento de voz, viaje luminico, Satelite Defensa, efectos visuales, congelamiento de nave, sonar y registro minimo de eventos educativos.
+- `index.html`: carga modulos puros antes de `game.js`, expone parametros de Armeria/Lab y muestra selector de perfil.
 - `tests/mathSpeech.test.js`: pruebas permanentes para la logica pura de voz matematica.
 - `tests/satelliteDefense.test.js`: pruebas permanentes para seleccion de multiplicaciones dificiles y opciones del satelite.
+- `tests/mathProgress.test.js`: pruebas permanentes para estadisticas, perfiles y export/import JSON.
 
 ## Estrategia de modularizacion
 
@@ -69,9 +143,10 @@ La regla usada fue separar lo que no depende de Phaser:
 
 - Logica pura: `src/core/mathSpeech.js`.
 - Logica pura: `src/core/satelliteDefense.js`.
+- Logica pura: `src/core/mathProgress.js`.
 - Efectos y escena: `game.js`.
 
-Esto permite probar interpretacion de voz, seleccion de tablas dificiles y generacion de alternativas sin abrir navegador, sin microfono y sin Phaser.
+Esto permite probar interpretacion de voz, seleccion de tablas dificiles, generacion de alternativas y estadisticas de aprendizaje sin abrir navegador, sin microfono y sin Phaser.
 
 ## Validaciones usadas
 
@@ -81,8 +156,10 @@ Comandos recomendados:
 node --check game.js
 node --check src/core/mathSpeech.js
 node --check src/core/satelliteDefense.js
+node --check src/core/mathProgress.js
 node tests/mathSpeech.test.js
 node tests/satelliteDefense.test.js
+node tests/mathProgress.test.js
 git diff --check
 ```
 
@@ -91,6 +168,7 @@ Que verifica cada uno:
 - `node --check`: sintaxis JavaScript.
 - `node tests/mathSpeech.test.js`: casos reales de respuestas habladas.
 - `node tests/satelliteDefense.test.js`: casos de seleccion de tablas dificiles y opciones.
+- `node tests/mathProgress.test.js`: conteo de intentos, perfiles separados y export/import JSON.
 - `git diff --check`: whitespace problematico o conflictos de merge en el diff.
 
 ## Prueba manual en navegador
@@ -122,6 +200,10 @@ Lista de prueba:
 - Satelite correcto: consume una carga, activa circulo/satelite y dispara hasta agotar municion.
 - Satelite incorrecto: consume una carga, reproduce error/explosion y desvanece holograma.
 - Armeria: modificar disparos, velocidad de giro, arco zigzag y velocidad zigzag en vivo.
+- Menu: selector de perfil muestra `Isabella` y `Desarrollador`.
+- Menu: al seleccionar `Isabella`, los botones de modo cambian borde/texto a rosado.
+- Armeria: `Daño por Choque` y `Daño por Proyectiles` modifican dano real en vivo.
+- Consola: `MathProgress.loadProgress({ profileId: "hija" })` muestra estadisticas de Isabella.
 
 ## Reglas para futuras sesiones de AI
 
@@ -132,52 +214,33 @@ Lista de prueba:
 - No modificar modos 1 y 2 al agregar ayudas arcade del modo 3.
 - Mantener el juego jugable despues de cada cambio.
 - Si se agrega una regla educativa, crear prueba permanente cuando sea posible.
-- Para nuevas estadisticas, no mezclar persistencia directamente en `game.js`; crear modulo puro primero.
+- Para nuevas estadisticas, no mezclar persistencia directamente en `game.js`; extender modulo puro primero.
+- `game.js` debe registrar eventos; los calculos educativos deben vivir en `src/core`.
+- Mantener compatibilidad con los perfiles locales `hija`/`dev`.
 
 ## Siguiente paso sugerido
 
-Abrir un nuevo chat para implementar `estadisticas de aprendizaje`.
+Abrir un nuevo chat leyendo primero este archivo y pedir cambios pequenos. Las estadisticas de aprendizaje ya estan implementadas.
 
-Propuesta conversada:
+Pedido recomendado para el proximo chat:
 
-1. Usar almacenamiento local con exportacion/importacion JSON.
-2. Empezar con `localStorage` por simplicidad; considerar `IndexedDB` si luego hay perfiles multiples o historial largo.
-3. Crear modulo puro `src/core/mathProgress.js`.
-4. Crear pruebas `tests/mathProgress.test.js`.
-5. Hacer que `game.js` solo informe eventos, por ejemplo:
+```text
+Hola, lee primero docs/ai-development-notes.md y continua desde ahi.
 
-```js
-MathProgress.recordAttempt({
-    a,
-    b,
-    correct,
-    responseMs,
-    mode,
-    method
-});
+Reglas:
+- cambios pequenos y verificables;
+- no tocar .DS_Store;
+- no convertir game.js en mas monobloque;
+- si una logica no depende de Phaser, crear o extender modulo puro en src/core;
+- agregar test permanente cuando sea posible;
+- game.js debe registrar eventos, no calcular logica educativa compleja;
+- no agregar ayudas arcade a modos 1 y 2;
+- mantener el juego jugable despues de cada cambio.
 ```
 
-Datos relevantes por multiplicacion:
+Ideas futuras razonables:
 
-- intentos totales;
-- aciertos;
-- errores;
-- porcentaje de acierto;
-- tiempo promedio de respuesta;
-- fecha de ultimo intento;
-- fecha de ultimo acierto;
-- fecha de ultimo error;
-- racha de aciertos;
-- racha de errores;
-- metodo de respuesta: moneda, voz, satelite;
-- respuestas incorrectas elegidas.
-
-Criterios de reforzamiento sugeridos:
-
-- priorizar errores recientes;
-- priorizar bajo porcentaje de acierto;
-- priorizar respuestas lentas aunque sean correctas;
-- reintroducir tablas no practicadas recientemente;
-- bajar prioridad si hay racha de aciertos.
-
-El nuevo chat deberia recibir este archivo como contexto y pedir: "Implementar estadisticas de aprendizaje con modulo puro, pruebas, persistencia local y export/import JSON, sin tocar modos 1 y 2 con ayudas arcade".
+- Crear una vista/panel de estadisticas dentro del menu para no depender de consola.
+- Usar `MathProgress` para sugerir practicas futuras sin crear ayudas arcade en modos 1 y 2.
+- Crear botones UI de export/import JSON por perfil.
+- Evaluar `IndexedDB` solo si el historial crece mucho o aparecen multiples estudiantes/dispositivos.
