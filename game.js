@@ -55,6 +55,13 @@ let mathTextsGroup;
 let answersGroup;
 let activeProblem = null;
 let failedMath = []; // Listado de objetos { a, b, errors }
+let speechRecognition = null;
+let isListeningMathAnswer = false;
+let mathVoiceHoldTimer = null;
+let lightTravelActive = false;
+let playerInputFrozen = false;
+let releaseFreezeWhenPointerNear = false;
+let arrivalSonarRings = [];
 
 // Nuevas variables Survival 
 let playerHealth = 100;
@@ -186,6 +193,234 @@ function speakText(text) {
         window.speechSynthesis.speak(utterance);
     }
 }
+
+function playHangupSound() {
+    playTone(330, 'sawtooth', 0.9, 0.22);
+    setTimeout(() => playTone(220, 'sawtooth', 0.7, 0.18), 260);
+}
+
+function showMathVoiceMessage(scene, text, color = '#FFFFFF', x = config.width / 2, y = config.height / 2) {
+    let msg = scene.add.text(x, y, text, {
+        fontSize: '34px',
+        fill: color,
+        align: 'center',
+        fontStyle: 'bold',
+        stroke: '#000',
+        strokeThickness: 6,
+        fontFamily: 'Arial, sans-serif'
+    });
+    msg.setOrigin(0.5);
+    msg.setDepth(4000);
+    scene.tweens.add({
+        targets: msg,
+        scale: 1.25,
+        alpha: 0,
+        duration: 1200,
+        ease: 'Power2',
+        onComplete: () => msg.destroy()
+    });
+}
+
+function showTechnicalSpeechError(scene) {
+    showMathVoiceMessage(scene, "Problema tecnico\nintente mas tarde...", '#FFCC00');
+    speakText("Problema técnico, intente más tarde");
+    playHangupSound();
+}
+
+function showIncorrectVoiceAnswer(scene) {
+    const block = activeProblem && activeProblem.blockRef ? activeProblem.blockRef : null;
+    const x = block ? block.x : config.width / 2;
+    const y = block ? block.y + 58 : config.height / 2;
+    showMathVoiceMessage(scene, "Incorrecto", '#FF3333', x, y);
+    speakText("Incorrecto");
+    playExplosion();
+}
+
+function getSpeechRecognitionConstructor() {
+    return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
+
+function stopMathVoiceListening() {
+    if (mathVoiceHoldTimer) {
+        clearTimeout(mathVoiceHoldTimer);
+        mathVoiceHoldTimer = null;
+    }
+    isListeningMathAnswer = false;
+    if (activeProblem && activeProblem.blockRef && activeProblem.blockRef.micIcon) {
+        activeProblem.blockRef.micIcon.setText('MIC');
+        activeProblem.blockRef.micIcon.setColor('#FFFFFF');
+    }
+}
+
+function findCorrectAnswerCoin() {
+    if (!answersGroup) return null;
+    return answersGroup.getChildren().find(coin => coin.active && coin.isCorrect) || null;
+}
+
+function clearArrivalSonar(scene) {
+    arrivalSonarRings.forEach(ring => {
+        if (ring && ring.active) {
+            scene.tweens.killTweensOf(ring);
+            ring.destroy();
+        }
+    });
+    arrivalSonarRings = [];
+}
+
+function createArrivalSonar(scene, x, y) {
+    clearArrivalSonar(scene);
+    const colors = [0x00FFFF, 0xFFFFFF, 0xFF00FF];
+
+    for (let i = 0; i < 3; i++) {
+        let sonar = scene.add.circle(x, y, 28 + (i * 24));
+        sonar.setDepth(3600);
+        sonar.setStrokeStyle(5, colors[i], 0.85);
+        sonar.setAlpha(0.25 + (i * 0.2));
+        arrivalSonarRings.push(sonar);
+
+        scene.tweens.add({
+            targets: sonar,
+            radius: 92 + (i * 34),
+            alpha: 0.12,
+            duration: 760 + (i * 160),
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut',
+            onUpdate: () => sonar.setPosition(player.x, player.y)
+        });
+    }
+}
+
+function startMathVoiceListening(scene, block) {
+    if (currentGameMode !== 3) return;
+    if (isGameOver || currentPhase !== "WAITING_ANSWER" || !activeProblem || activeProblem.blockRef !== block) return;
+    if (isListeningMathAnswer || lightTravelActive) return;
+
+    const Recognition = getSpeechRecognitionConstructor();
+    if (!Recognition || !window.MathSpeech) {
+        showTechnicalSpeechError(scene);
+        return;
+    }
+
+    isListeningMathAnswer = true;
+    if (block.micIcon) {
+        block.micIcon.setText('REC');
+        block.micIcon.setColor('#00FFFF');
+    }
+
+    try {
+        speechRecognition = new Recognition();
+        speechRecognition.lang = 'es-ES';
+        speechRecognition.continuous = false;
+        speechRecognition.interimResults = false;
+        speechRecognition.maxAlternatives = 3;
+
+        speechRecognition.onresult = (event) => {
+            const alternatives = Array.from(event.results[0] || []);
+            const heardCorrectAnswer = alternatives.some(alt => {
+                return window.MathSpeech.isSpokenAnswerCorrect(alt.transcript, activeProblem.result);
+            });
+
+            stopMathVoiceListening();
+            if (heardCorrectAnswer) {
+                startLightSpeedTravel(scene);
+            } else {
+                showIncorrectVoiceAnswer(scene);
+            }
+        };
+
+        speechRecognition.onerror = () => {
+            stopMathVoiceListening();
+            showTechnicalSpeechError(scene);
+        };
+
+        speechRecognition.onend = () => {
+            stopMathVoiceListening();
+        };
+
+        speechRecognition.start();
+    } catch (e) {
+        stopMathVoiceListening();
+        showTechnicalSpeechError(scene);
+    }
+}
+
+function startLightSpeedTravel(scene) {
+    if (currentGameMode !== 3) return;
+    const correctCoin = findCorrectAnswerCoin();
+    if (!correctCoin || !player || lightTravelActive) return;
+
+    lightTravelActive = true;
+    playerInputFrozen = true;
+    releaseFreezeWhenPointerNear = false;
+
+    const fromX = activeProblem.blockRef ? activeProblem.blockRef.x : player.x;
+    const fromY = activeProblem.blockRef ? activeProblem.blockRef.y : player.y;
+    const beam = scene.add.graphics();
+    beam.setDepth(3500);
+    beam.lineStyle(42, 0x00A2FF, 0.20);
+    beam.beginPath();
+    beam.moveTo(fromX, fromY);
+    beam.lineTo(correctCoin.x, correctCoin.y);
+    beam.strokePath();
+    beam.lineStyle(28, 0x00FFFF, 0.55);
+    beam.beginPath();
+    beam.moveTo(fromX, fromY);
+    beam.lineTo(correctCoin.x, correctCoin.y);
+    beam.strokePath();
+    beam.lineStyle(10, 0xFFFFFF, 0.95);
+    beam.beginPath();
+    beam.moveTo(fromX, fromY);
+    beam.lineTo(correctCoin.x, correctCoin.y);
+    beam.strokePath();
+    beam.lineStyle(4, 0xFF00FF, 0.9);
+    beam.beginPath();
+    beam.moveTo(fromX, fromY);
+    beam.lineTo(correctCoin.x, correctCoin.y);
+    beam.strokePath();
+
+    const glow = scene.add.circle(player.x, player.y, 14, 0x00FFFF, 0.8);
+    glow.setDepth(3501);
+    playTone(920, 'sawtooth', 0.22, 0.2);
+
+    player.body.setVelocity(0, 0);
+    player.body.setAcceleration(0, 0);
+    player.body.enable = false;
+
+    scene.tweens.add({
+        targets: player,
+        x: correctCoin.x,
+        y: correctCoin.y,
+        duration: 260,
+        ease: 'Expo.easeIn',
+        onUpdate: () => {
+            glow.setPosition(player.x, player.y);
+        },
+        onComplete: () => {
+            scene.tweens.add({
+                targets: [beam, glow],
+                alpha: 0,
+                duration: 180,
+                onComplete: () => {
+                    beam.destroy();
+                    glow.destroy();
+                }
+            });
+
+            player.body.enable = true;
+            player.body.reset(correctCoin.x, correctCoin.y);
+            player.body.setVelocity(0, 0);
+            player.body.setAcceleration(0, 0);
+            lightTravelActive = false;
+            releaseFreezeWhenPointerNear = true;
+            createArrivalSonar(scene, correctCoin.x, correctCoin.y);
+
+            if (correctCoin.active) {
+                hitAnswerCoin.call(scene, player, correctCoin);
+            }
+        }
+    });
+}
 // ----------------------------------------
 let currentTableIndex = 0;
 let currentStep = 1;
@@ -242,11 +477,12 @@ function create() {
                 let newY = yBase + (window.GLOBAL_TOP_OFFSET || 0);
                 block.setY(newY);
                 if (block.linkedText) block.linkedText.setY(newY);
+                if (block.micIcon) block.micIcon.setY(newY);
                 
                 // Re-aplicar el tween para que no se desfase
-                this.tweens.killTweensOf([block, block.linkedText]);
+                this.tweens.killTweensOf([block, block.linkedText, block.micIcon]);
                 this.tweens.add({
-                    targets: [block, block.linkedText],
+                    targets: [block, block.linkedText, block.micIcon].filter(Boolean),
                     y: newY - 5,
                     duration: Phaser.Math.Between(1500, 2000),
                     yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
@@ -394,19 +630,32 @@ function create() {
         enemiesGroup.clear(true, true);
         answersGroup.getChildren().forEach(c => { if(c.linkedText) c.linkedText.destroy(); });
         answersGroup.clear(true, true);
-        mathBlocksGroup.getChildren().forEach(b => { if(b.linkedText) b.linkedText.destroy(); });
+        mathBlocksGroup.getChildren().forEach(b => {
+            if(b.linkedText) b.linkedText.destroy();
+            if(b.micIcon) b.micIcon.destroy();
+        });
+        mathTextsGroup.clear(true, true);
         mathBlocksGroup.clear(true, true);
         
         currentPhase = "WAITING_BLOCK";
         isGamePaused = false;
         isGameOver = false;
+        clearArrivalSonar(this);
+        playerInputFrozen = false;
+        releaseFreezeWhenPointerNear = false;
         
         spawnMathBlocks(this);
     };
 
     this.returnToMenu = () => {
         currentGameMode = 0;
-        mathBlocksGroup.getChildren().forEach(b => { if(b.linkedText) b.linkedText.destroy(); });
+        clearArrivalSonar(this);
+        playerInputFrozen = false;
+        releaseFreezeWhenPointerNear = false;
+        mathBlocksGroup.getChildren().forEach(b => {
+            if(b.linkedText) b.linkedText.destroy();
+            if(b.micIcon) b.micIcon.destroy();
+        });
         mathBlocksGroup.clear(true, true);
         mathTextsGroup.clear(true, true);
         enemiesGroup.clear(true, true);
@@ -725,7 +974,21 @@ function update() {
         }
     }
     
-    if (window.GLOBAL_AUTOPILOT) {
+    if (playerInputFrozen) {
+        player.body.setAcceleration(0, 0);
+        player.body.setVelocity(0, 0);
+        if (releaseFreezeWhenPointerNear) {
+            let pointer = this.input.activePointer;
+            let distPointer = Phaser.Math.Distance.Between(pointer.x, pointer.y, player.x, player.y);
+            if (distPointer < 80) {
+                playerInputFrozen = false;
+                releaseFreezeWhenPointerNear = false;
+                clearArrivalSonar(this);
+                targetX = pointer.x;
+                targetY = pointer.y;
+            }
+        }
+    } else if (window.GLOBAL_AUTOPILOT) {
         // Sonar Visual (Emite un pulso verde circular cada medio segundo)
         if (!this.lastSonarTime || this.time.now > this.lastSonarTime + 500) {
             this.lastSonarTime = this.time.now;
@@ -1073,9 +1336,24 @@ function spawnSingleMathBlock(scene, i, forcedA = null, forcedB = null) {
     mathTextsGroup.add(txt);
     
     block.linkedText = txt;
+
+    let micIcon = scene.add.text(x + 39, y, 'MIC', { fontSize: '15px', fill: '#FFFFFF', fontStyle: 'bold', fontFamily: 'Arial, sans-serif' });
+    micIcon.setOrigin(0.5);
+    micIcon.setVisible(false);
+    micIcon.setDepth(2500);
+    mathTextsGroup.add(micIcon);
+    block.micIcon = micIcon;
+    block.setInteractive({ useHandCursor: true });
+    block.on('pointerdown', () => {
+        if (currentGameMode !== 3) return;
+        if (currentPhase !== "WAITING_ANSWER" || !activeProblem || activeProblem.blockRef !== block) return;
+        startMathVoiceListening(scene, block);
+    });
+    block.on('pointerup', stopMathVoiceListening);
+    block.on('pointerout', stopMathVoiceListening);
     
     scene.tweens.add({
-        targets: [block, txt],
+        targets: [block, txt, micIcon],
         y: y - 5,
         duration: Phaser.Math.Between(1500, 2000),
         yoyo: true,
@@ -1135,12 +1413,26 @@ function hitMathBlock(player, block) {
     });
     
     activeProblem.blockRef = block;
+    if (block.linkedText) block.linkedText.setX(block.x - 12);
+    if (block.micIcon && currentGameMode === 3) {
+        block.micIcon.setVisible(true);
+        block.micIcon.setAlpha(1);
+        this.tweens.add({
+            targets: block.micIcon,
+            alpha: 0.25,
+            duration: 420,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
+        });
+    }
 
     // Apagar visualmente los demás bloques temporales
     mathBlocksGroup.getChildren().forEach(b => { 
         if (b !== block) {
             b.setAlpha(0.2); 
             if(b.linkedText) b.linkedText.setAlpha(0.2);
+            if(b.micIcon) b.micIcon.setAlpha(0.2);
         }
     });
 
@@ -1282,6 +1574,7 @@ function hitAnswerCoin(player, coin) {
             let targetIndex = activeProblem.index;
             if(activeProblem.blockRef) {
                  if(activeProblem.blockRef.linkedText) activeProblem.blockRef.linkedText.destroy();
+                 if(activeProblem.blockRef.micIcon) activeProblem.blockRef.micIcon.destroy();
                  activeProblem.blockRef.destroy();
             }
             
@@ -1291,6 +1584,7 @@ function hitAnswerCoin(player, coin) {
             mathBlocksGroup.getChildren().forEach(b => { 
                  b.setAlpha(1); b.clearTint(); 
                  if(b.linkedText) b.linkedText.setAlpha(1);
+                 if(b.micIcon) b.micIcon.setAlpha(1);
             });
         } else {
             spawnMathBlocks(this);
@@ -1782,6 +2076,9 @@ function hitEnemy(player, enemy) {
 
 function triggerGameOver(scene) {
     isGameOver = true;
+    clearArrivalSonar(scene);
+    playerInputFrozen = false;
+    releaseFreezeWhenPointerNear = false;
     player.setTint(0xff0000);
     player.body.moves = false;
     trailEmitter.stop();
