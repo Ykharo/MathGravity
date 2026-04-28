@@ -97,6 +97,24 @@ let isRadarLocked = false;
 let playerShieldCharges = 0;
 let enemyBulletsGroup;
 let enemyRadarGraphics = null;
+let satelliteCharges = 0;
+let satelliteCapsule = null;
+let satelliteCapsuleText = null;
+let satellitePromptQuestionText = null;
+let satellitePromptMiniOrb = null;
+let satelliteHintShown = false;
+let satelliteChallengeActive = false;
+let satelliteChallengeIndex = 0;
+let satelliteQuestionText = null;
+let satelliteAnswerGroup;
+let satelliteAnswerTexts = [];
+let satelliteActive = false;
+let satelliteAmmo = 0;
+let satelliteOrbiter = null;
+let satelliteShieldCircle = null;
+let satelliteAngle = 0;
+let satelliteLockAngle = 0;
+let satelliteLastFireTime = 0;
 
 // Ancho dinámico del juego
 let currentGameWidth = window.innerWidth;
@@ -354,8 +372,8 @@ function startLightSpeedTravel(scene) {
     playerInputFrozen = true;
     releaseFreezeWhenPointerNear = false;
 
-    const fromX = activeProblem.blockRef ? activeProblem.blockRef.x : player.x;
-    const fromY = activeProblem.blockRef ? activeProblem.blockRef.y : player.y;
+    const fromX = player.x;
+    const fromY = player.y;
     const beam = scene.add.graphics();
     beam.setDepth(3500);
     beam.lineStyle(42, 0x00A2FF, 0.20);
@@ -641,8 +659,13 @@ function create() {
         isGamePaused = false;
         isGameOver = false;
         clearArrivalSonar(this);
+        clearSatelliteDefense(this);
+        clearSatelliteCapsule(this);
         playerInputFrozen = false;
         releaseFreezeWhenPointerNear = false;
+        satelliteCharges = currentGameMode === 3 ? 3 : 0;
+        satelliteHintShown = false;
+        satelliteChallengeIndex = 0;
         
         spawnMathBlocks(this);
     };
@@ -650,6 +673,8 @@ function create() {
     this.returnToMenu = () => {
         currentGameMode = 0;
         clearArrivalSonar(this);
+        clearSatelliteDefense(this);
+        clearSatelliteCapsule(this);
         playerInputFrozen = false;
         releaseFreezeWhenPointerNear = false;
         mathBlocksGroup.getChildren().forEach(b => {
@@ -757,6 +782,9 @@ function create() {
     answersGroup = this.physics.add.group({
         immovable: true // Para que la nave rebote si es falso
     });
+    satelliteAnswerGroup = this.physics.add.group({
+        immovable: true
+    });
     
     // Balas enemigas
     enemyBulletsGroup = this.physics.add.group();
@@ -792,6 +820,7 @@ function create() {
     // Colisiones con Monedas Creadas (Respuestas)
     // Usamos collider en vez de overlap para poder rebotar en las falsas. Resolvelo en la función logica
     this.physics.add.collider(player, answersGroup, hitAnswerCoin, null, this);
+    this.physics.add.collider(player, satelliteAnswerGroup, hitSatelliteAnswer, null, this);
     
     // Si estamos reiniciando la escena y el modo ya está elegido, arrancamos los bloques
     if (currentGameMode !== 0 && !isGameOver) {
@@ -831,6 +860,10 @@ function create() {
             targetX = pointer.x;
             targetY = pointer.y;
         }
+    }, this);
+
+    this.input.keyboard.on('keydown-S', function () {
+        requestSatelliteChallenge(this);
     }, this);
 }
 
@@ -873,6 +906,8 @@ function update() {
     
     // Actualizar Barra de Vida Gráfica
     actualizarBarraVidaGrafica(this);
+    updateSatelliteCapsule(this);
+    updateSatelliteDefense(this);
     
     let currentRadius = config.width * (window.GLOBAL_RING_RADIUS_PCT !== undefined ? window.GLOBAL_RING_RADIUS_PCT : 0.15);
     let centerY = config.height / 2 + (currentRadius * 0.5); // 1/4 más abajo que antes (0.25 -> 0.5)
@@ -1737,6 +1772,367 @@ function spawnWall(scene) {
     gapGrowths[chosenGap]++;
 }
 
+function isSatelliteDefenseEligible() {
+    return currentGameMode === 3 && !isGameOver && satelliteCharges > 0;
+}
+
+function updateSatelliteCapsule(scene) {
+    if (!isSatelliteDefenseEligible()) {
+        clearSatelliteCapsule(scene);
+        return;
+    }
+
+    if (!satelliteCapsule) {
+        satelliteCapsule = scene.add.circle(config.width - 82, config.height / 2, 42);
+        satelliteCapsule.setStrokeStyle(3, 0x00FF66, 0.92);
+        satelliteCapsule.setFillStyle(0x003311, 0.12);
+        satelliteCapsule.setDepth(3200);
+        satelliteCapsule.setInteractive({ useHandCursor: true });
+        satelliteCapsule.on('pointerdown', () => showSatelliteBriefing(scene));
+
+        satelliteCapsuleText = scene.add.text(config.width - 82, config.height / 2, 'PRESS\nS', {
+            fontSize: '21px',
+            fill: '#00FF66',
+            align: 'center',
+            fontStyle: 'bold',
+            stroke: '#001008',
+            strokeThickness: 4,
+            fontFamily: 'monospace'
+        });
+        satelliteCapsuleText.setOrigin(0.5);
+        satelliteCapsuleText.setDepth(3201);
+
+        satellitePromptMiniOrb = scene.add.circle(config.width - 82, (config.height / 2) - 42, 8, 0x00FF66, 0.95);
+        satellitePromptMiniOrb.setStrokeStyle(2, 0xCFFFFF, 0.8);
+        satellitePromptMiniOrb.setDepth(3202);
+
+        satellitePromptQuestionText = scene.add.text(config.width - 82, (config.height / 2) + 64, `SAT ${satelliteCharges}`, {
+            fontSize: '15px',
+            fill: '#00FF66',
+            align: 'center',
+            fontStyle: 'bold',
+            stroke: '#001008',
+            strokeThickness: 4,
+            fontFamily: 'monospace'
+        });
+        satellitePromptQuestionText.setOrigin(0.5);
+        satellitePromptQuestionText.setDepth(3201);
+
+        scene.tweens.add({
+            targets: [satelliteCapsule, satelliteCapsuleText, satellitePromptQuestionText],
+            alpha: 0.36,
+            duration: 620,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
+        });
+    }
+
+    const x = config.width - 82;
+    const y = config.height / 2;
+    satelliteCapsule.setPosition(x, y);
+    satelliteCapsuleText.setPosition(x, y);
+
+    if (satellitePromptMiniOrb) {
+        const miniAngle = scene.time.now * 0.0022;
+        satellitePromptMiniOrb.setPosition(
+            x + Math.cos(miniAngle) * 42,
+            y + Math.sin(miniAngle) * 42
+        );
+    }
+
+    if (satellitePromptQuestionText && window.SatelliteDefense) {
+        const facts = window.SatelliteDefense.getDifficultFacts(failedMath).slice(0, 3);
+        const loopItems = ['PRESS\nS', ...facts.map(fact => `${fact.a}x${fact.b}`)];
+        const current = loopItems[Math.floor(scene.time.now / 1200) % loopItems.length];
+        satelliteCapsuleText.setText(current);
+        satelliteCapsuleText.setFontSize(current.includes('\n') ? '21px' : '24px');
+        satellitePromptQuestionText.setPosition(x, y + 64);
+        satellitePromptQuestionText.setText(`SAT ${satelliteCharges}`);
+    }
+}
+
+function clearSatelliteCapsule(scene) {
+    if (satelliteCapsule) {
+        if (scene) scene.tweens.killTweensOf(satelliteCapsule);
+        satelliteCapsule.destroy();
+        satelliteCapsule = null;
+    }
+    if (satelliteCapsuleText) {
+        if (scene) scene.tweens.killTweensOf(satelliteCapsuleText);
+        satelliteCapsuleText.destroy();
+        satelliteCapsuleText = null;
+    }
+    if (satellitePromptQuestionText) {
+        if (scene) scene.tweens.killTweensOf(satellitePromptQuestionText);
+        satellitePromptQuestionText.destroy();
+        satellitePromptQuestionText = null;
+    }
+    if (satellitePromptMiniOrb) {
+        satellitePromptMiniOrb.destroy();
+        satellitePromptMiniOrb = null;
+    }
+}
+
+function showSatelliteBriefing(scene) {
+    if (!isSatelliteDefenseEligible()) return;
+    satelliteHintShown = true;
+    const preview = window.SatelliteDefense
+        ? window.SatelliteDefense.chooseChallenge(failedMath, undefined, satelliteChallengeIndex)
+        : { a: 8, b: 8, result: 64 };
+    const msg = scene.add.text(config.width / 2, config.height / 2, `TOP SECRET EXPERIMENTAL SAT GUN\nPresione S y responda ${preview.a}x${preview.b}`, {
+        fontSize: '24px',
+        fill: '#00FFFF',
+        align: 'center',
+        fontStyle: 'bold',
+        stroke: '#001018',
+        strokeThickness: 7,
+        fontFamily: 'monospace'
+    });
+    msg.setOrigin(0.5);
+    msg.setDepth(4200);
+    speakText(`Top secret experimental Sat Gun. Para activar presione S y responda ${preview.a} por ${preview.b}`);
+    scene.tweens.add({
+        targets: msg,
+        alpha: 0,
+        y: msg.y - 80,
+        duration: 3600,
+        ease: 'Power2',
+        onComplete: () => msg.destroy()
+    });
+}
+
+function requestSatelliteChallenge(scene) {
+    if (!isSatelliteDefenseEligible() || satelliteActive) return;
+    if (!window.SatelliteDefense) {
+        showMathVoiceMessage(scene, "SAT no disponible", '#FFCC00');
+        return;
+    }
+    spawnSatelliteChallenge(scene);
+}
+
+function clearSatelliteChallenge(scene, fade = false) {
+    const cleanup = () => {
+        if (satelliteQuestionText) {
+            satelliteQuestionText.destroy();
+            satelliteQuestionText = null;
+        }
+        satelliteAnswerTexts.forEach(txt => { if (txt && txt.active) txt.destroy(); });
+        satelliteAnswerTexts = [];
+        if (satelliteAnswerGroup) satelliteAnswerGroup.clear(true, true);
+        satelliteChallengeActive = false;
+    };
+
+    const targets = [
+        satelliteQuestionText,
+        ...satelliteAnswerTexts,
+        ...(satelliteAnswerGroup ? satelliteAnswerGroup.getChildren() : [])
+    ].filter(Boolean);
+
+    if (fade && targets.length > 0) {
+        scene.tweens.add({
+            targets,
+            alpha: 0,
+            duration: 450,
+            ease: 'Sine.easeOut',
+            onComplete: cleanup
+        });
+    } else {
+        cleanup();
+    }
+}
+
+function spawnSatelliteChallenge(scene) {
+    clearSatelliteChallenge(scene);
+    const challenge = window.SatelliteDefense.chooseChallenge(failedMath, undefined, satelliteChallengeIndex);
+    const options = window.SatelliteDefense.generateAnswerOptions(challenge.result);
+    satelliteChallengeIndex++;
+    satelliteChallengeActive = true;
+
+    const baseX = Phaser.Math.Clamp(player.x, 185, config.width - 185);
+    const baseY = Phaser.Math.Clamp(player.y - 170, 220, config.height - 170);
+    satelliteQuestionText = scene.add.text(baseX, baseY - 52, `${challenge.a}x${challenge.b} ?`, {
+        fontSize: '30px',
+        fill: '#AFFFFF',
+        align: 'center',
+        fontStyle: 'bold',
+        stroke: '#001018',
+        strokeThickness: 5,
+        fontFamily: 'monospace'
+    });
+    satelliteQuestionText.setOrigin(0.5);
+    satelliteQuestionText.setDepth(3300);
+
+    const offsets = [-152, 0, 152];
+    options.forEach((answer, index) => {
+        const coin = satelliteAnswerGroup.create(baseX + offsets[index], baseY + 30, 'coinTex');
+        coin.body.setCircle(18);
+        coin.setTint(0x00FFFF);
+        coin.setAlpha(0.72);
+        coin.isSatelliteAnswer = true;
+        coin.isCorrect = answer === challenge.result;
+        coin.value = answer;
+        coin.setDepth(3290);
+
+        const txt = scene.add.text(coin.x, coin.y - 38, answer.toString(), {
+            fontSize: '28px',
+            fill: '#FFFFFF',
+            fontStyle: 'bold',
+            stroke: '#001018',
+            strokeThickness: 4,
+            fontFamily: 'monospace'
+        });
+        txt.setOrigin(0.5);
+        txt.setDepth(3300);
+        satelliteAnswerTexts.push(txt);
+
+        scene.tweens.add({
+            targets: [coin, txt],
+            y: `+=${index === 1 ? 8 : -8}`,
+            alpha: 0.42,
+            duration: 520,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
+        });
+    });
+
+    playTone(760, 'sine', 0.16, 0.14);
+}
+
+function hitSatelliteAnswer(player, coin) {
+    if (!satelliteChallengeActive || !coin.isSatelliteAnswer) return;
+    satelliteChallengeActive = false;
+    satelliteCharges = Math.max(0, satelliteCharges - 1);
+
+    if (coin.isCorrect) {
+        playSuccess();
+        showMathVoiceMessage(this, "SAT GUN ACTIVADO", '#00FFFF', player.x, player.y - 70);
+        clearSatelliteChallenge(this, true);
+        activateSatelliteDefense(this);
+    } else {
+        playExplosion();
+        showMathVoiceMessage(this, "SAT GUN perdido", '#FF3333', coin.x, coin.y);
+        clearSatelliteChallenge(this, true);
+    }
+}
+
+function activateSatelliteDefense(scene) {
+    clearSatelliteDefense(scene);
+    satelliteActive = true;
+    satelliteAmmo = window.GLOBAL_SATELLITE_SHOTS || 10;
+    satelliteAngle = 0;
+    satelliteLockAngle = 0;
+    satelliteLastFireTime = 0;
+
+    satelliteShieldCircle = scene.add.circle(player.x, player.y, 70);
+    satelliteShieldCircle.setStrokeStyle(3, 0x8FFFFF, 0.5);
+    satelliteShieldCircle.setFillStyle(0x00FFFF, 0.05);
+    satelliteShieldCircle.setDepth(3100);
+
+    satelliteOrbiter = scene.add.circle(player.x + 70, player.y, 11, 0xEFFFFF, 1);
+    satelliteOrbiter.setStrokeStyle(3, 0x00FFFF, 1);
+    satelliteOrbiter.setDepth(3101);
+
+    scene.tweens.add({
+        targets: satelliteShieldCircle,
+        alpha: 0.26,
+        duration: 420,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+    });
+}
+
+function updateSatelliteDefense(scene) {
+    if (!satelliteActive) return;
+    if (!satelliteOrbiter || !satelliteShieldCircle || satelliteAmmo <= 0) {
+        clearSatelliteDefense(scene);
+        return;
+    }
+
+    const orbitRadius = 72;
+    satelliteShieldCircle.setPosition(player.x, player.y);
+
+    let target = null;
+    let bestDist = 430;
+    enemiesGroup.getChildren().forEach(enemy => {
+        if (!enemy.active) return;
+        const dist = Phaser.Math.Distance.Between(player.x, player.y, enemy.x, enemy.y);
+        if (dist < bestDist) {
+            bestDist = dist;
+            target = enemy;
+        }
+    });
+
+    let sx;
+    let sy;
+    if (target) {
+        satelliteLockAngle = Phaser.Math.Angle.Between(player.x, player.y, target.x, target.y);
+        const zigzagSpeed = window.GLOBAL_SATELLITE_ZIGZAG_SPEED || 0.026;
+        const zigzagArc = window.GLOBAL_SATELLITE_ZIGZAG_ARC !== undefined ? window.GLOBAL_SATELLITE_ZIGZAG_ARC : 0.24;
+        const zigzag = Math.sin(scene.time.now * zigzagSpeed) * zigzagArc;
+        sx = player.x + Math.cos(satelliteLockAngle + zigzag) * orbitRadius;
+        sy = player.y + Math.sin(satelliteLockAngle + zigzag) * orbitRadius;
+    } else {
+        satelliteAngle += window.GLOBAL_SATELLITE_ORBIT_SPEED || 0.18;
+        sx = player.x + Math.cos(satelliteAngle) * orbitRadius;
+        sy = player.y + Math.sin(satelliteAngle) * orbitRadius;
+    }
+    satelliteOrbiter.setPosition(sx, sy);
+
+    if (target && scene.time.now > satelliteLastFireTime + 155) {
+        satelliteLastFireTime = scene.time.now;
+        fireSatelliteVolley(scene, target, sx, sy);
+        satelliteAmmo--;
+        if (satelliteAmmo <= 0) {
+            scene.time.delayedCall(260, () => clearSatelliteDefense(scene));
+        }
+    }
+}
+
+function fireSatelliteVolley(scene, target, sx, sy) {
+    playLaser();
+    const angle = Phaser.Math.Angle.Between(sx, sy, target.x, target.y);
+    const sideAngle = angle + Math.PI / 2;
+    const bKey = (USE_PRO_ASSETS && scene.textures.exists('bullet_pro')) ? 'bullet_pro' : 'bulletTex';
+
+    [-8, 8].forEach(offset => {
+        const bx = sx + Math.cos(sideAngle) * offset;
+        const by = sy + Math.sin(sideAngle) * offset;
+        const bullet = bulletsGroup.create(bx, by, bKey);
+        if (!bullet) return;
+        bullet.damage = 3;
+        bullet.setDepth(3102);
+        bullet.setTint(0xAFFFFF);
+        bullet.setScale(USE_PRO_ASSETS ? 0.075 : 1.15);
+        bullet.rotation = angle;
+        bullet.body.setCircle(4);
+        const zigzagArc = window.GLOBAL_SATELLITE_ZIGZAG_ARC !== undefined ? window.GLOBAL_SATELLITE_ZIGZAG_ARC : 0.24;
+        const arcSpread = Math.sin(scene.time.now * 0.017 + offset) * (zigzagArc * 0.33);
+        bullet.setVelocity(Math.cos(angle + arcSpread) * 1040, Math.sin(angle + arcSpread) * 1040);
+        scene.time.delayedCall(1200, () => {
+            if (bullet.active) bullet.destroy();
+        });
+    });
+}
+
+function clearSatelliteDefense(scene) {
+    clearSatelliteChallenge(scene);
+    satelliteActive = false;
+    satelliteAmmo = 0;
+    if (satelliteOrbiter) {
+        if (scene) scene.tweens.killTweensOf(satelliteOrbiter);
+        satelliteOrbiter.destroy();
+        satelliteOrbiter = null;
+    }
+    if (satelliteShieldCircle) {
+        if (scene) scene.tweens.killTweensOf(satelliteShieldCircle);
+        satelliteShieldCircle.destroy();
+        satelliteShieldCircle = null;
+    }
+}
+
 
 
 /** Funciones Visuales Auxiliares **/
@@ -2007,7 +2403,7 @@ function hitEnemyWithWeapon(weapon, enemy) {
     if (!enemy.active || !weapon.active) return;
     
     let scene = enemy.scene;
-    let damage = (weapon.texture && weapon.texture.key === 'missileTex') ? 3 : 1;
+    let damage = weapon.damage || ((weapon.texture && (weapon.texture.key === 'missileTex' || weapon.texture.key === 'missile_pro')) ? 3 : 1);
     enemy.hp -= damage;
     
     // Destruir rastro de forma segura
@@ -2077,6 +2473,8 @@ function hitEnemy(player, enemy) {
 function triggerGameOver(scene) {
     isGameOver = true;
     clearArrivalSonar(scene);
+    clearSatelliteDefense(scene);
+    clearSatelliteCapsule(scene);
     playerInputFrozen = false;
     releaseFreezeWhenPointerNear = false;
     player.setTint(0xff0000);
@@ -2110,6 +2508,9 @@ function triggerGameOver(scene) {
              activeProblem = null; 
              playerHealth = 100;
              hasShield = false;
+             satelliteCharges = currentGameMode === 3 ? 3 : 0;
+             satelliteHintShown = false;
+             satelliteChallengeIndex = 0;
              score = 0;
              document.getElementById('score').innerText = score;
              currentPhase = "WAITING_BLOCK";

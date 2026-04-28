@@ -272,6 +272,10 @@
         // --- Armeria Variables ---
         var GLOBAL_CANNON_AMMO = 4;
         var GLOBAL_MISSILE_AMMO = 2;
+        var GLOBAL_SATELLITE_SHOTS = 10;
+        var GLOBAL_SATELLITE_ORBIT_SPEED = 0.18;
+        var GLOBAL_SATELLITE_ZIGZAG_ARC = 0.24;
+        var GLOBAL_SATELLITE_ZIGZAG_SPEED = 0.026;
         var GLOBAL_RADAR_RADIUS = 300;
         var GLOBAL_BULLET_SPEED = 800;
         var GLOBAL_MISSILE_SPEED = 400;
@@ -401,6 +405,10 @@
             }
             if (name === 'CannonAmmo') window.GLOBAL_CANNON_AMMO = parseInt(val);
             if (name === 'MissileAmmo') window.GLOBAL_MISSILE_AMMO = parseInt(val);
+            if (name === 'SatelliteShots') window.GLOBAL_SATELLITE_SHOTS = parseInt(val);
+            if (name === 'SatelliteOrbitSpeed') window.GLOBAL_SATELLITE_ORBIT_SPEED = parseFloat(val);
+            if (name === 'SatelliteZigzagArc') window.GLOBAL_SATELLITE_ZIGZAG_ARC = parseFloat(val);
+            if (name === 'SatelliteZigzagSpeed') window.GLOBAL_SATELLITE_ZIGZAG_SPEED = parseFloat(val);
             if (name === 'Radar') window.GLOBAL_RADAR_RADIUS = parseInt(val);
             if (name === 'BulletVel') window.GLOBAL_BULLET_SPEED = parseInt(val);
             if (name === 'MissileVel') window.GLOBAL_MISSILE_SPEED = parseInt(val);
@@ -614,6 +622,18 @@
         <label>Munición Misiles (Recarga): <span id="valMissileAmmo">2</span></label><br>
         <input type="range" min="1" max="10" step="1" value="2" oninput="updatePhysVar('MissileAmmo', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
 
+        <label>Disparos Satélite: <span id="valSatelliteShots">10</span></label><br>
+        <input type="range" min="1" max="40" step="1" value="10" oninput="updatePhysVar('SatelliteShots', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+
+        <label>Velocidad Giro Satélite: <span id="valSatelliteOrbitSpeed">0.18</span></label><br>
+        <input type="range" min="0.03" max="0.45" step="0.01" value="0.18" oninput="updatePhysVar('SatelliteOrbitSpeed', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+
+        <label>Arco Zig Zag Satélite: <span id="valSatelliteZigzagArc">0.24</span></label><br>
+        <input type="range" min="0.00" max="0.70" step="0.01" value="0.24" oninput="updatePhysVar('SatelliteZigzagArc', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+
+        <label>Velocidad Zig Zag Satélite: <span id="valSatelliteZigzagSpeed">0.026</span></label><br>
+        <input type="range" min="0.004" max="0.080" step="0.001" value="0.026" oninput="updatePhysVar('SatelliteZigzagSpeed', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+
         <label>Radio Detección Radar: <span id="valRadar">300</span></label><br>
         <input type="range" min="100" max="800" step="20" value="300" oninput="updatePhysVar('Radar', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
 
@@ -657,6 +677,7 @@
     <div id="game-container"></div>
 
     <script src="src/core/mathSpeech.js"></script>
+    <script src="src/core/satelliteDefense.js"></script>
     <script src="game.js"></script>
 </body>
 </html>
