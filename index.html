@@ -551,21 +551,40 @@
             armeria.style.display = (armeria.style.display === 'none') ? 'block' : 'none';
         }
 
-        function openTutor(op = '5x6') {
-            if (window.gameScene && window.game) {
-                // Pausar si no está pausado
-                if (!window.isGamePaused) {
-                    window.gameScene.togglePause();
-                }
-                
-                // Asegurar que las escenas estén registradas (si se cargaron vía module)
-                if (window.ComputerTutorBoot && !window.game.scene.getScene('ComputerTutorBoot')) {
-                    window.game.scene.add('ComputerTutorBoot', window.ComputerTutorBoot);
-                    window.game.scene.add('ComputerTutorScene', window.ComputerTutorScene);
-                }
-
-                window.game.scene.start('ComputerTutorBoot', { op });
+        function openTutor(op) {
+            if (!window.gameScene || !window.game || !window.ComputerTutorBoot || !window.ComputerTutorScene) {
+                console.warn('Computer Tutor no está listo todavía.');
+                return;
             }
+
+            const operation = op || (window.gameScene.getTutorOperation ? window.gameScene.getTutorOperation() : '5x6');
+
+            // Asegurar que las escenas estén registradas (si se cargaron vía module)
+            if (!window.game.scene.getScene('ComputerTutorBoot')) {
+                window.game.scene.add('ComputerTutorBoot', window.ComputerTutorBoot);
+            }
+            if (!window.game.scene.getScene('ComputerTutorScene')) {
+                window.game.scene.add('ComputerTutorScene', window.ComputerTutorScene);
+            }
+
+            if (window.gameScene.setTutorCamouflage) {
+                window.gameScene.setTutorCamouflage(true);
+            }
+
+            const closeTutor = () => {
+                if (window.gameScene && window.gameScene.setTutorCamouflage) {
+                    window.gameScene.setTutorCamouflage(false);
+                }
+            };
+
+            if (window.game.scene.isActive('ComputerTutorScene')) {
+                const tutorScene = window.game.scene.getScene('ComputerTutorScene');
+                if (tutorScene && tutorScene.runTutor) tutorScene.runTutor(operation);
+                window.gameScene.scene.bringToTop('ComputerTutorScene');
+                return;
+            }
+
+            window.gameScene.scene.launch('ComputerTutorBoot', { operation, onClose: closeTutor });
         }
     </script>
 </head>

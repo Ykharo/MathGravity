@@ -17,6 +17,12 @@ export default class ComputerTutorScene extends Phaser.Scene {
         this.currentMechanic = null;
     }
 
+    init(data = {}) {
+        this.initialOperation = data.operation || data.op || '8x7';
+        this.onCloseTutor = typeof data.onClose === 'function' ? data.onClose : null;
+        this.closeNotified = false;
+    }
+
     create() {
         const width = this.cameras.main.width;
         const height = this.cameras.main.height;
@@ -52,10 +58,12 @@ export default class ComputerTutorScene extends Phaser.Scene {
         this.inputPanel.on('consult', (op) => this.runTutor(op));
 
         // 8. Operación inicial
-        this.runTutor('8x7');
+        this.runTutor(this.initialOperation);
 
         // 9. Efecto de Scanlines
         this.createScanlines(width, height);
+
+        this.events.once('shutdown', () => this.notifyClose());
     }
 
     runTutor(operationStr) {
@@ -192,11 +200,23 @@ export default class ComputerTutorScene extends Phaser.Scene {
         const hit = this.add.rectangle(x, y, 120, 50, 0xff0000, 0)
             .setInteractive({ useHandCursor: true });
         
-        hit.on('pointerdown', () => this.scene.stop());
+        hit.on('pointerdown', () => this.closeTutor());
         
         // Efecto visual al pasar el mouse
         hit.on('pointerover', () => btn.setTint(0xffaaaa));
         hit.on('pointerout', () => btn.clearTint());
+    }
+
+    closeTutor() {
+        this.notifyClose();
+        this.scene.stop();
+    }
+
+    notifyClose() {
+        if (!this.closeNotified && this.onCloseTutor) {
+            this.closeNotified = true;
+            this.onCloseTutor();
+        }
     }
 
     createScanlines(width, height) {

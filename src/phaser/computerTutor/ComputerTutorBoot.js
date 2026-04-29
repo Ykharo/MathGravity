@@ -3,6 +3,11 @@ export default class ComputerTutorBoot extends Phaser.Scene {
         super('ComputerTutorBoot');
     }
 
+    init(data = {}) {
+        this.initialOperation = data.operation || data.op || '8x7';
+        this.onCloseTutor = typeof data.onClose === 'function' ? data.onClose : null;
+    }
+
     preload() {
         console.log('ComputerTutorBoot: Preloading assets...');
         
@@ -19,8 +24,10 @@ export default class ComputerTutorBoot extends Phaser.Scene {
             console.error('ComputerTutorBoot: Error cargando:', file.key, file.src);
         });
 
-        // Audio assets (Usando placeholders del proyecto)
-        this.load.path = '../../assets/audio/';
+        // Phaser resolves asset URLs from the host page, so the lab and main game need
+        // different relative prefixes.
+        const isLabPage = window.location.pathname.includes('/labs/computer-tutor/');
+        this.load.path = isLabPage ? '../../assets/audio/' : 'assets/audio/';
         this.load.audio('tutor-step', 'laser.mp3');
         this.load.audio('tutor-success', 'success.mp3');
         this.load.audio('tutor-error', 'explosion_f.mp3');
@@ -28,6 +35,9 @@ export default class ComputerTutorBoot extends Phaser.Scene {
 
     create() {
         console.log('ComputerTutorBoot: Boot complete.');
-        this.scene.start('ComputerTutorScene');
+        this.scene.start('ComputerTutorScene', {
+            operation: this.initialOperation,
+            onClose: this.onCloseTutor
+        });
     }
 }

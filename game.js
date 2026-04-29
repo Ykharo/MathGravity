@@ -40,6 +40,7 @@ const config = {
 };
 
 const game = new Phaser.Game(config);
+window.game = game;
 
 let player;
 let targetCoin;
@@ -82,6 +83,8 @@ let singularityActive = false;
 let singularityTimer = 0;
 let timeDilation = 1.0;
 let isGamePaused = false;
+let tutorCamouflageActive = false;
+let tutorPausedGame = false;
 
 // Estados matemáticos
 let currentPhase = "WAITING_BLOCK"; // "WAITING_BLOCK" o "WAITING_ANSWER"
@@ -562,6 +565,7 @@ function create() {
     // Funciones Habilidad/UI
     this.togglePause = () => {
         isGamePaused = !isGamePaused;
+        window.isGamePaused = isGamePaused;
         if (isGamePaused) {
             this.physics.pause();
             this.tweens.pauseAll();
@@ -573,6 +577,66 @@ function create() {
             document.getElementById('btn-pause').innerText = "⏸ PAUSA";
             document.getElementById('btn-pause').style.backgroundColor = "rgba(0,0,0,0.6)";
         }
+    };
+
+    this.getTutorOperation = () => {
+        if (activeProblem && activeProblem.a && activeProblem.b) {
+            return `${activeProblem.a}x${activeProblem.b}`;
+        }
+
+        const visibleBlock = mathBlocksGroup && mathBlocksGroup.getChildren().find(block => (
+            block && block.active && block.mathData && block.mathData.a && block.mathData.b
+        ));
+
+        if (visibleBlock) {
+            return `${visibleBlock.mathData.a}x${visibleBlock.mathData.b}`;
+        }
+
+        return '5x6';
+    };
+
+    this.setTutorCamouflage = (active) => {
+        tutorCamouflageActive = Boolean(active);
+
+        if (tutorCamouflageActive) {
+            tutorPausedGame = isGamePaused;
+            if (!isGamePaused) {
+                isGamePaused = true;
+                window.isGamePaused = true;
+                this.physics.pause();
+                this.tweens.pauseAll();
+            }
+            if (player) player.setAlpha(0.45);
+
+            const pauseButton = document.getElementById('btn-pause');
+            if (pauseButton) {
+                pauseButton.innerText = "TUTOR ACTIVO";
+                pauseButton.style.backgroundColor = "#004400";
+            }
+            return;
+        }
+
+        if (player) player.setAlpha(1);
+        if (!tutorPausedGame) {
+            isGamePaused = false;
+            window.isGamePaused = false;
+            this.physics.resume();
+            this.tweens.resumeAll();
+
+            const pauseButton = document.getElementById('btn-pause');
+            if (pauseButton) {
+                pauseButton.innerText = "⏸ PAUSA";
+                pauseButton.style.backgroundColor = "rgba(0,0,0,0.6)";
+            }
+        } else {
+            const pauseButton = document.getElementById('btn-pause');
+            if (pauseButton) {
+                pauseButton.innerText = "▶ REANUDAR";
+                pauseButton.style.backgroundColor = "#ff0000";
+            }
+        }
+
+        tutorPausedGame = false;
     };
     
     this.triggerSingularity = () => {
@@ -698,6 +762,9 @@ function create() {
         
         currentPhase = "WAITING_BLOCK";
         isGamePaused = false;
+        window.isGamePaused = false;
+        tutorCamouflageActive = false;
+        tutorPausedGame = false;
         isGameOver = false;
         clearArrivalSonar(this);
         clearSatelliteDefense(this);
@@ -739,6 +806,9 @@ function create() {
         if (btnTutor) btnTutor.style.display = 'none';
 
         isGamePaused = true;
+        window.isGamePaused = true;
+        tutorCamouflageActive = false;
+        tutorPausedGame = false;
     };
 
     // Resetear variables en caso de reinicio
@@ -2408,6 +2478,10 @@ function getConfiguredDamage(value, fallbackAmount) {
 }
 
 function takeDamage(scene, amount) {
+    if (tutorCamouflageActive) {
+        return;
+    }
+
     // Escudo defensivo reactivo por cargas (Modo 3, 10+ respuestas)
     if (currentGameMode === 3 && score >= 10 && playerShieldCharges > 0) {
         playerShieldCharges--;
