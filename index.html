@@ -34,22 +34,24 @@
             transition: background 0.5s ease;
         }
 
-        /* Estilo Premium para el Slider de Volumen */
+        /* Estilo Premium para el Slider de Volumen (En Juego) */
         .volume-container {
-            margin: 20px 0;
-            width: 80%;
-            max-width: 300px;
+            width: 150px;
             display: flex;
             flex-direction: column;
-            align-items: center;
-            gap: 10px;
+            align-items: flex-start;
+            gap: 5px;
             z-index: 10;
+            background: rgba(0,0,0,0.4);
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.2);
         }
 
         .volume-slider-wrapper {
             position: relative;
             width: 100%;
-            height: 12px;
+            height: 8px;
             background: rgba(255, 255, 255, 0.1);
             border-radius: 10px;
             backdrop-filter: blur(5px);
@@ -74,12 +76,12 @@
         .volume-slider::-webkit-slider-thumb {
             -webkit-appearance: none;
             appearance: none;
-            width: 20px;
-            height: 20px;
+            width: 16px;
+            height: 16px;
             background: #fff;
             border-radius: 50%;
             cursor: pointer;
-            box-shadow: 0 0 10px rgba(0, 255, 255, 0.8);
+            box-shadow: 0 0 8px rgba(0, 255, 255, 0.8);
             border: 2px solid #0ff;
             transition: transform 0.2s;
         }
@@ -101,7 +103,7 @@
 
         .volume-label {
             font-family: 'monospace';
-            font-size: 14px;
+            font-size: 11px;
             color: #0ff;
             text-transform: uppercase;
             letter-spacing: 1px;
@@ -229,7 +231,8 @@
         }
 
         .profile-control {
-            margin-bottom: 18px;
+            margin-bottom: 10px;
+            margin-top: 20px;
             z-index: 10;
             display: flex;
             align-items: center;
@@ -241,6 +244,20 @@
             color: #fff;
             font-size: 16px;
             font-weight: bold;
+        }
+
+        .difficulty-control {
+            margin-bottom: 25px;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            font-family: monospace;
+            background: rgba(0,0,0,0.3);
+            padding: 10px 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
         }
 
         #profile-selector {
@@ -319,26 +336,32 @@
         var GLOBAL_VALID_TABLES = [3,4,5,6,7,8,9];
         
         // --- Armeria Variables ---
-        var GLOBAL_CANNON_AMMO = 4;
+        var GLOBAL_CANNON_AMMO = 5;
         var GLOBAL_MISSILE_AMMO = 2;
-        var GLOBAL_SATELLITE_SHOTS = 10;
-        var GLOBAL_SATELLITE_ORBIT_SPEED = 0.18;
+        var GLOBAL_SATELLITE_SHOTS = 15;
+        var GLOBAL_SATELLITE_ORBIT_SPEED = 0.20;
         var GLOBAL_SATELLITE_ZIGZAG_ARC = 0.24;
-        var GLOBAL_SATELLITE_ZIGZAG_SPEED = 0.026;
+        var GLOBAL_SATELLITE_ZIGZAG_SPEED = 0.0208;
         var GLOBAL_RADAR_RADIUS = 300;
         var GLOBAL_BULLET_SPEED = 800;
         var GLOBAL_MISSILE_SPEED = 400;
-        var GLOBAL_SHIELD_CHANCE = 0.25;
-        var GLOBAL_ENEMY_FIRE_RATE = 2000; 
+        var GLOBAL_SHIELD_CHANCE = 0.40;
+        var GLOBAL_ENEMY_FIRE_RATE = 800; 
         var GLOBAL_ENEMY_BULLET_SPEED = 400;
-        var GLOBAL_COLLISION_DAMAGE = 20;
+        var GLOBAL_COLLISION_DAMAGE = 10;
         var GLOBAL_PROJECTILE_DAMAGE = 10;
         var GLOBAL_MISSILE_TURN = 0.1;
         var GLOBAL_PLAYER_SCALE = 0.09;
         var GLOBAL_ENEMY_SCALE = 0.11;
         var GLOBAL_ENEMY_ELITE_SCALE = 0.12;
         var GLOBAL_SHIELD_SCALE = 1.2;
+        var GLOBAL_ENEMY_NORMAL_HP = 1;
+        var GLOBAL_ENEMY_ELITE_HP = 3;
+        var GLOBAL_ENEMY_RADAR_RADIUS = 400;
+        var GLOBAL_MANUAL_SHIELD_DURATION = 3000;
+        var GLOBAL_MANUAL_SHIELD_CHARGES = 5;
         var GLOBAL_SHIELD_ALPHA = 0.4;
+        var GLOBAL_DIFFICULTY_THRESHOLD = 4;
         
         var audioCtx = null;
         function initAudio() {
@@ -420,6 +443,29 @@
             if (!menu) return;
             menu.classList.toggle('isabella-profile', profileId === 'hija');
         }
+
+        function setDifficulty(isHard) {
+            window.GLOBAL_DIFFICULTY_MODE = isHard ? 'Hard' : 'Easy';
+            if (isHard) {
+                window.GLOBAL_ENEMY_ELITE_HP = 6;
+                window.GLOBAL_MANUAL_SHIELD_CHARGES = 3;
+            } else {
+                window.GLOBAL_ENEMY_ELITE_HP = 3;
+                window.GLOBAL_MANUAL_SHIELD_CHARGES = 5;
+            }
+            // Sincronizar con Armería
+            updatePhysVar('EliteHP', window.GLOBAL_ENEMY_ELITE_HP);
+            updatePhysVar('ManualShieldCharges', window.GLOBAL_MANUAL_SHIELD_CHARGES);
+        }
+
+        function toggleDifficultyUI(cb) {
+            setDifficulty(cb.checked);
+            const label = document.getElementById('label-difficulty');
+            if (label) {
+                label.innerText = cb.checked ? 'DIFICULTAD: HARD' : 'DIFICULTAD: EASY';
+                label.style.color = cb.checked ? '#f0f' : '#0ff';
+            }
+        }
         
         function updateValidTables() {
             let active = [];
@@ -472,7 +518,11 @@
         }
         
         function updatePhysVar(name, val) {
-            document.getElementById('val' + name).innerText = val;
+            let displayVal = val;
+            if (name === 'CollisionDamage' || name === 'ProjectileDamage') displayVal += '%';
+            if (name === 'ShieldChance') displayVal = Math.round(parseFloat(val) * 100) + '%';
+            
+            document.getElementById('val' + name).innerText = displayVal;
             if (name === 'Tension') GLOBAL_TENSION = parseFloat(val);
             if (name === 'Engine') GLOBAL_ENGINE = parseFloat(val);
             if (name === 'Turn') GLOBAL_RADIO_GIRO = parseFloat(val);
@@ -493,36 +543,17 @@
             if (name === 'CannonAmmo') window.GLOBAL_CANNON_AMMO = parseInt(val);
             if (name === 'MissileAmmo') window.GLOBAL_MISSILE_AMMO = parseInt(val);
             if (name === 'SatelliteShots') window.GLOBAL_SATELLITE_SHOTS = parseInt(val);
-            if (name === 'SatelliteOrbitSpeed') window.GLOBAL_SATELLITE_ORBIT_SPEED = parseFloat(val);
-            if (name === 'SatelliteZigzagArc') window.GLOBAL_SATELLITE_ZIGZAG_ARC = parseFloat(val);
-            if (name === 'SatelliteZigzagSpeed') window.GLOBAL_SATELLITE_ZIGZAG_SPEED = parseFloat(val);
             if (name === 'Radar') window.GLOBAL_RADAR_RADIUS = parseInt(val);
-            if (name === 'BulletVel') window.GLOBAL_BULLET_SPEED = parseInt(val);
-            if (name === 'MissileVel') window.GLOBAL_MISSILE_SPEED = parseInt(val);
-            if (name === 'MissileTurn') window.GLOBAL_MISSILE_TURN = parseFloat(val);
+            if (name === 'NormalHP') window.GLOBAL_ENEMY_NORMAL_HP = parseInt(val);
+            if (name === 'EliteHP') window.GLOBAL_ENEMY_ELITE_HP = parseInt(val);
             if (name === 'ShieldChance') window.GLOBAL_SHIELD_CHANCE = parseFloat(val);
             if (name === 'EnemyFireRate') window.GLOBAL_ENEMY_FIRE_RATE = parseInt(val);
-            if (name === 'EnemyBulletSpeed') window.GLOBAL_ENEMY_BULLET_SPEED = parseInt(val);
             if (name === 'CollisionDamage') window.GLOBAL_COLLISION_DAMAGE = parseInt(val);
             if (name === 'ProjectileDamage') window.GLOBAL_PROJECTILE_DAMAGE = parseInt(val);
-            if (name === 'PlayerScale') {
-                window.GLOBAL_PLAYER_SCALE = parseFloat(val);
-                if (window.player && window.USE_PRO_ASSETS) window.player.setScale(window.GLOBAL_PLAYER_SCALE);
-            }
-            if (name === 'EnemyScale') {
-                window.GLOBAL_ENEMY_SCALE = parseFloat(val);
-            }
-            if (name === 'EnemyEliteScale') {
-                window.GLOBAL_ENEMY_ELITE_SCALE = parseFloat(val);
-            }
-            if (name === 'ShieldScale') {
-                window.GLOBAL_SHIELD_SCALE = parseFloat(val);
-                if (window.shieldSprite) window.shieldSprite.setScale(window.GLOBAL_SHIELD_SCALE * 0.5);
-            }
-            if (name === 'ShieldAlpha') {
-                window.GLOBAL_SHIELD_ALPHA = parseFloat(val);
-                if (window.shieldSprite) window.shieldSprite.setAlpha(window.GLOBAL_SHIELD_ALPHA);
-            }
+            if (name === 'EnemyRadar') window.GLOBAL_ENEMY_RADAR_RADIUS = parseInt(val);
+            if (name === 'ManualShieldDur') window.GLOBAL_MANUAL_SHIELD_DURATION = parseInt(val);
+            if (name === 'ManualShieldCharges') window.GLOBAL_MANUAL_SHIELD_CHARGES = parseInt(val);
+            if (name === 'DifficultyThreshold') window.GLOBAL_DIFFICULTY_THRESHOLD = parseInt(val);
             if (name === 'TopOffset') {
                 window.GLOBAL_TOP_OFFSET = parseInt(val);
                 let overlay = document.getElementById('ui-overlay');
@@ -558,33 +589,10 @@
             }
 
             const operation = op || (window.gameScene.getTutorOperation ? window.gameScene.getTutorOperation() : '5x6');
-
-            // Asegurar que las escenas estén registradas (si se cargaron vía module)
-            if (!window.game.scene.getScene('ComputerTutorBoot')) {
-                window.game.scene.add('ComputerTutorBoot', window.ComputerTutorBoot);
+            
+            if (window.gameScene.triggerTutorSequence) {
+                window.gameScene.triggerTutorSequence(operation);
             }
-            if (!window.game.scene.getScene('ComputerTutorScene')) {
-                window.game.scene.add('ComputerTutorScene', window.ComputerTutorScene);
-            }
-
-            if (window.gameScene.setTutorCamouflage) {
-                window.gameScene.setTutorCamouflage(true);
-            }
-
-            const closeTutor = () => {
-                if (window.gameScene && window.gameScene.setTutorCamouflage) {
-                    window.gameScene.setTutorCamouflage(false);
-                }
-            };
-
-            if (window.game.scene.isActive('ComputerTutorScene')) {
-                const tutorScene = window.game.scene.getScene('ComputerTutorScene');
-                if (tutorScene && tutorScene.runTutor) tutorScene.runTutor(operation);
-                window.gameScene.scene.bringToTop('ComputerTutorScene');
-                return;
-            }
-
-            window.gameScene.scene.launch('ComputerTutorBoot', { operation, onClose: closeTutor });
         }
     </script>
 </head>
@@ -615,23 +623,23 @@
             <span style="font-size: 10px; color: rgba(255,255,255,0.5);">CAMBIA EL ESTILO VISUAL Y SONORO</span>
         </div>
 
-        <div class="volume-container">
-            <div style="display: flex; justify-content: space-between; width: 100%; margin-bottom: 5px;">
-                <span class="volume-label">VOLUMEN MAESTRO</span>
-                <span class="volume-label volume-val-label">50%</span>
-            </div>
-            <div class="volume-slider-wrapper">
-                <input type="range" min="0" max="1" step="0.01" value="0.5" class="volume-slider" oninput="setGlobalVolume(this.value)">
-                <div class="volume-progress"></div>
-            </div>
-        </div>
-
         <div class="profile-control">
             <label for="profile-selector">PERFIL</label>
             <select id="profile-selector" onchange="setLearningProfile(this.value)">
                 <option value="hija">Isabella</option>
                 <option value="dev">Desarrollador</option>
             </select>
+        </div>
+
+        <div class="difficulty-control">
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <span id="label-difficulty" class="mode-label" style="color: #0ff;">DIFICULTAD: EASY</span>
+                <label class="switch">
+                    <input type="checkbox" id="toggle-difficulty" onchange="toggleDifficultyUI(this)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <span style="font-size: 10px; color: rgba(255,255,255,0.5);">HARD: VIDA ELITE 6 | ESCUDOS 3</span>
         </div>
 
         <div class="mode-buttons-container">
@@ -652,8 +660,22 @@
         <button onclick="toggleLab()" style="font-size: 18px; cursor: pointer; background: rgba(0,0,0,0.6); color: white; border: 1px solid white; border-radius: 8px; padding: 8px 12px; font-family: monospace;">
             ⚙️ LAB
         </button>
+
+        <div class="volume-container">
+            <div style="display: flex; justify-content: space-between; width: 100%; margin-bottom: 2px;">
+                <span class="volume-label">VOLUMEN</span>
+                <span class="volume-label volume-val-label">50%</span>
+            </div>
+            <div class="volume-slider-wrapper">
+                <input type="range" min="0" max="1" step="0.01" value="0.5" class="volume-slider" oninput="setGlobalVolume(this.value)">
+                <div class="volume-progress"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="ui-right-container" style="position: absolute; top: 120px; right: 20px; z-index: 2000; display: flex; flex-direction: column; gap: 10px; align-items: flex-end;">
         <button id="btn-tutor" onclick="openTutor()" style="display: none; font-size: 18px; cursor: pointer; background: rgba(0,40,0,0.8); color: #0f0; border: 1px solid #0f0; border-radius: 8px; padding: 8px 12px; font-family: monospace;">
-            💻 TUTOR
+            💻 COMPUTADORA
         </button>
     </div>
 
@@ -740,68 +762,47 @@
     <div id="armeria-panel" style="display: none; position: absolute; top: 70px; right: 20px; background: rgba(0,20,40,0.85); color: #0FF; padding: 15px; border-radius: 8px; z-index: 1000; font-family: monospace; border: 1px solid #0FF; max-height: 80%; overflow-y: auto; width: 300px;">
         <h4 style="margin: 0 0 10px 0; color: #fff;">Armería (Modo 3)</h4>
         
-        <label>Munición Balas (Recarga): <span id="valCannonAmmo">4</span></label><br>
-        <input type="range" min="1" max="20" step="1" value="4" oninput="updatePhysVar('CannonAmmo', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+        <label>Munición Balas (Recarga): <span id="valCannonAmmo">5</span></label><br>
+        <input type="range" min="1" max="20" step="1" value="5" oninput="updatePhysVar('CannonAmmo', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
 
         <label>Munición Misiles (Recarga): <span id="valMissileAmmo">2</span></label><br>
         <input type="range" min="1" max="10" step="1" value="2" oninput="updatePhysVar('MissileAmmo', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
 
-        <label>Disparos Satélite: <span id="valSatelliteShots">10</span></label><br>
-        <input type="range" min="1" max="40" step="1" value="10" oninput="updatePhysVar('SatelliteShots', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
-
-        <label>Velocidad Giro Satélite: <span id="valSatelliteOrbitSpeed">0.18</span></label><br>
-        <input type="range" min="0.03" max="0.45" step="0.01" value="0.18" oninput="updatePhysVar('SatelliteOrbitSpeed', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
-
-        <label>Arco Zig Zag Satélite: <span id="valSatelliteZigzagArc">0.24</span></label><br>
-        <input type="range" min="0.00" max="0.70" step="0.01" value="0.24" oninput="updatePhysVar('SatelliteZigzagArc', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
-
-        <label>Velocidad Zig Zag Satélite: <span id="valSatelliteZigzagSpeed">0.026</span></label><br>
-        <input type="range" min="0.004" max="0.080" step="0.001" value="0.026" oninput="updatePhysVar('SatelliteZigzagSpeed', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+        <label>Disparos Satélite: <span id="valSatelliteShots">15</span></label><br>
+        <input type="range" min="1" max="40" step="1" value="15" oninput="updatePhysVar('SatelliteShots', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
 
         <label>Radio Detección Radar: <span id="valRadar">300</span></label><br>
         <input type="range" min="100" max="800" step="20" value="300" oninput="updatePhysVar('Radar', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
 
-        <label>Velocidad Balas: <span id="valBulletVel">800</span></label><br>
-        <input type="range" min="200" max="2000" step="50" value="800" oninput="updatePhysVar('BulletVel', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
-        
-        <label>Velocidad Misiles (Homing): <span id="valMissileVel">400</span></label><br>
-        <input type="range" min="100" max="1500" step="50" value="400" oninput="updatePhysVar('MissileVel', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
-        
-        <label>Fuerza Giro Misiles: <span id="valMissileTurn">0.1</span></label><br>
-        <input type="range" min="0.01" max="0.5" step="0.01" value="0.1" oninput="updatePhysVar('MissileTurn', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+        <label>Vida Nave Común Enemiga: <span id="valNormalHP">1</span></label><br>
+        <input type="range" min="1" max="10" step="1" value="1" oninput="updatePhysVar('NormalHP', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
 
-        <label>Probabilidad Escudo Enemigo: <span id="valShieldChance">0.25</span></label><br>
-        <input type="range" min="0" max="1" step="0.05" value="0.25" oninput="updatePhysVar('ShieldChance', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+        <label>Vida Nave Élite Enemiga: <span id="valEliteHP">3</span></label><br>
+        <input type="range" min="1" max="20" step="1" value="3" oninput="updatePhysVar('EliteHP', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
 
-        <label>Frecuencia Disparo Enemigo (ms): <span id="valEnemyFireRate">2000</span></label><br>
-        <input type="range" min="500" max="5000" step="100" value="2000" oninput="updatePhysVar('EnemyFireRate', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+        <label>% Creación de naves Elite: <span id="valShieldChance">40%</span></label><br>
+        <input type="range" min="0" max="1" step="0.05" value="0.4" oninput="updatePhysVar('ShieldChance', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
 
-        <label>Velocidad Bala Enemiga: <span id="valEnemyBulletSpeed">400</span></label><br>
-        <input type="range" min="100" max="800" step="50" value="400" oninput="updatePhysVar('EnemyBulletSpeed', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+        <label>Frecuencia Disparo Enemigo (ms): <span id="valEnemyFireRate">800</span></label><br>
+        <input type="range" min="500" max="5000" step="100" value="800" oninput="updatePhysVar('EnemyFireRate', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
 
-        <label>Daño por Choque: <span id="valCollisionDamage">20</span></label><br>
-        <input type="range" min="0" max="100" step="1" value="20" oninput="updatePhysVar('CollisionDamage', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+        <label>Radio Detección Enemiga: <span id="valEnemyRadar">400</span></label><br>
+        <input type="range" min="100" max="800" step="10" value="400" oninput="updatePhysVar('EnemyRadar', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
 
-        <label>Daño por Proyectiles: <span id="valProjectileDamage">10</span></label><br>
+        <label>Umbral de Dificultad (Score): <span id="valDifficultyThreshold">4</span></label><br>
+        <input type="range" min="1" max="15" step="1" value="4" oninput="updatePhysVar('DifficultyThreshold', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+
+        <label>Escudos Manuales (Stock): <span id="valManualShieldCharges">5</span></label><br>
+        <input type="range" min="1" max="10" step="1" value="5" oninput="updatePhysVar('ManualShieldCharges', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+
+        <label>Duración Escudo Manual (ms): <span id="valManualShieldDur">3000</span></label><br>
+        <input type="range" min="200" max="5000" step="100" value="3000" oninput="updatePhysVar('ManualShieldDur', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+
+        <label>Daño por Choque (Impacto): <span id="valCollisionDamage">10%</span></label><br>
+        <input type="range" min="0" max="100" step="1" value="10" oninput="updatePhysVar('CollisionDamage', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+
+        <label>Daño por Proyectiles: <span id="valProjectileDamage">10%</span></label><br>
         <input type="range" min="0" max="100" step="1" value="10" oninput="updatePhysVar('ProjectileDamage', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
-
-        <hr style="border: 0.5px solid #0FF; margin: 15px 0;">
-        <h5 style="margin: 0 0 10px 0;">Dimensiones de Naves (Modo Pro)</h5>
-        
-        <label>Escala Jugador: <span id="valPlayerScale">0.09</span></label><br>
-        <input type="range" min="0.05" max="0.5" step="0.01" value="0.09" oninput="updatePhysVar('PlayerScale', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
-
-        <label>Escala Enemigos Básicos: <span id="valEnemyScale">0.11</span></label><br>
-        <input type="range" min="0.05" max="0.5" step="0.01" value="0.11" oninput="updatePhysVar('EnemyScale', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
-
-        <label>Escala Enemigos Élite: <span id="valEnemyEliteScale">0.12</span></label><br>
-        <input type="range" min="0.05" max="0.5" step="0.01" value="0.12" oninput="updatePhysVar('EnemyEliteScale', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
-
-        <label>Escala Escudo: <span id="valShieldScale">1.2</span></label><br>
-        <input type="range" min="0.5" max="3.0" step="0.1" value="1.2" oninput="updatePhysVar('ShieldScale', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
-
-        <label>Transparencia Escudo: <span id="valShieldAlpha">0.4</span></label><br>
-        <input type="range" min="0.1" max="1.0" step="0.05" value="0.4" oninput="updatePhysVar('ShieldAlpha', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
     </div>
 
     <div id="game-container"></div>

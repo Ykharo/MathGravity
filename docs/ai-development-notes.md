@@ -266,6 +266,18 @@ Ideas futuras razonables:
     - **Guías de Dimensión**: Estandarizadas en todas las mecánicas, incluyendo las especiales (2, 5, 10).
     - **Consistencia Visual**: Unificación total al verde neón MG-88 y ajuste de opacidad de iconos al 80%.
 
+### Correcciones de Motor y Visibilidad (Abril 2026)
+
+- **Problema Detectado**: En "Modo Pro" (con assets), el fondo es negro. El código heredado del modo geométrico teñía a las naves normales de negro (`0x000000`) al nacer o al perder el escudo, haciéndolas invisibles. Además, al romperse el escudo, las naves Pro cambiaban erróneamente a la textura de triángulo geométrica y escala 1.0.
+- **Solución**: 
+    - Se modificó `spawnEnemy`, `hitEnemyWithWeapon` y `triggerGameOver` en `game.js`.
+    - **Prohibición de Tinte**: En Modo Pro, se eliminó cualquier uso de `setTint` en naves (jugador y enemigos), usando `clearTint()` donde sea necesario. Los assets Pro ya son visualmente distintos y no requieren tintes decorativos que podrían afectar su visibilidad.
+    - Se respeta la textura `enemy_pro` y la escala definida en `window.GLOBAL_ENEMY_SCALE` al romperse el escudo, manteniendo la fidelidad visual de los assets.
+
+- **Apertura Dinámica de Anillo (Abril 2026)**:
+    - **Problema**: El muro de perlas se cerraba completamente (`maxGrowths = 3`), bloqueando el acceso al centro, especialmente difícil para la nave Pro que tiene un hitbox mayor (~49px).
+    - **Solución**: Se modificó `spawnWall` en `game.js` para calcular `maxGrowths` dinámicamente. Ahora garantiza que el hueco sea siempre de al menos 2 veces el tamaño de la nave (`shipSize * 2.0`), adaptándose automáticamente a ambos modos de juego.
+
 ## Reglas para futuras sesiones de AI
 
 - El `ComputerTutor` debe mantenerse aislado en su carpeta; no agregar dependencias de `game.js` en su `core`.
@@ -273,11 +285,25 @@ Ideas futuras razonables:
 - Cualquier nueva estrategia pedagógica debe implementarse primero como una clase en `src/phaser/computerTutor/mechanics/`.
 - Mantener la estética retro-monocromática (usar solo verde fósforo y achurado).
 
+### Sistemas de Combate y Defensa Avanzados - (ABRIL 2026 - Sprint 4.5)
+
+- **Escudo Manual (Manual Shield)**:
+    - **Activación**: Tecla `E` o **Doble Tap** (iPad) sobre la nave.
+    - **Mecánica**: Consume cargas (inicia con 5). Otorga invulnerabilidad y destrucción por contacto durante un tiempo definido por `GLOBAL_MANUAL_SHIELD_DURATION`.
+    - **UI**: Icono dedicado en el lateral derecho con contador de cargas.
+- **Calibración Dinámica (Difficulty Threshold)**:
+    - **Umbral**: Controlado por `window.GLOBAL_DIFFICULTY_THRESHOLD` (Default: 4).
+    - **Impacto**: Desplaza toda la curva de dificultad (spawns, cañones y ráfagas élite). Permite calibrar la intensidad del juego sin tocar el código.
+- **Interacción iPad Pro**:
+    - **Long Press**: Mantener presionado el dedo sobre la nave activa el Satélite Defensa, reemplazando la tecla `S`.
+- **Naves Élite**: Persistencia total. No degradan a naves normales, manteniendo su desafío visual y técnico hasta el final.
+
 ## Siguiente paso sugerido
 
 1.  **Ajuste Fino de Audio**: Reemplazar los placeholders (`laser.mp3`, `success.mp3`) por archivos específicos con sonido "8-bit computer" grabados en `assets/audio/computerTutor/`.
 2.  **Integración Avanzada**: Hacer que el tutor se abra automáticamente cuando el jugador comete 3 errores seguidos en una misma multiplicación en Modo 3.
 3.  **Visualización de Errores**: Integrar las estadísticas de `MathProgress` dentro de la pantalla de análisis del tutor.
+
 
 Pedido recomendado para el proximo chat:
 

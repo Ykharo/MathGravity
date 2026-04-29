@@ -122,6 +122,17 @@ let satelliteLastFireTime = 0;
 // Ancho dinámico del juego
 let currentGameWidth = window.innerWidth;
 
+let manualShieldActive = false;
+let manualShieldTimer = 0;
+let manualShieldCharges = window.GLOBAL_MANUAL_SHIELD_CHARGES || 5;
+let lastPlayerClickTime = 0;
+let playerHoldStartTime = 0;
+
+// UI Manual Shield
+let manualShieldIcon = null;
+let manualShieldIconText = null;
+let manualShieldChargesText = null;
+
 // --- AUDIO SYSTEM (Oscillators & TTS) ---
 function playTone(freq, type, duration, volume) {
     if (!window.gameScene || !window.gameScene.sound.context) return;
@@ -569,11 +580,31 @@ function create() {
         if (isGamePaused) {
             this.physics.pause();
             this.tweens.pauseAll();
+            
+            // Pausar música si existe
+            let mainMusic = this.sound.get('music_main');
+            if (mainMusic) mainMusic.pause();
+
             document.getElementById('btn-pause').innerText = "▶ REANUDAR";
             document.getElementById('btn-pause').style.backgroundColor = "#ff0000";
         } else {
             this.physics.resume();
             this.tweens.resumeAll();
+
+            // Reanudar música si existe
+            let mainMusic = this.sound.get('music_main');
+            if (mainMusic) mainMusic.resume();
+
+            // Restaurar alpha si venimos de camuflaje de tutor
+            if (tutorCamouflageActive) {
+                tutorCamouflageActive = false;
+                this.tweens.add({
+                    targets: [player, trailEmitter],
+                    alpha: 1,
+                    duration: 500
+                });
+            }
+
             document.getElementById('btn-pause').innerText = "⏸ PAUSA";
             document.getElementById('btn-pause').style.backgroundColor = "rgba(0,0,0,0.6)";
         }
@@ -595,10 +626,144 @@ function create() {
         return '5x6';
     };
 
-    this.setTutorCamouflage = (active) => {
-        tutorCamouflageActive = Boolean(active);
+    this.playRetroBeeps = () => {
+        const tones = [880, 1100, 1320, 1760];
+        tones.forEach((freq, i) => {
+            this.time.delayedCall(i * 120, () => {
+                playTone(freq, 'square', 0.1, 0.2);
+            });
+        });
+    };
 
-        if (tutorCamouflageActive) {
+    this.launchTutorScreen = (operation) => {
+        if (!this.game.scene.getScene('ComputerTutorBoot')) {
+            this.game.scene.add('ComputerTutorBoot', window.ComputerTutorBoot);
+        }
+        if (!this.game.scene.getScene('ComputerTutorScene')) {
+            this.game.scene.add('ComputerTutorScene', window.ComputerTutorScene);
+        }
+
+        this.setTutorCamouflage(true);
+
+        const closeTutor = () => {
+            this.setTutorCamouflage(false);
+        };
+
+        if (this.game.scene.isActive('ComputerTutorScene')) {
+            const tutorScene = this.game.scene.getScene('ComputerTutorScene');
+            if (tutorScene && tutorScene.runTutor) tutorScene.runTutor(operation);
+            this.scene.bringToTop('ComputerTutorScene');
+        } else {
+            this.scene.launch('ComputerTutorBoot', { operation, onClose: closeTutor });
+        }
+    };
+
+    this.triggerTutorSequence = (operation) => {
+        if (tutorCamouflageActive || isGameOver) return;
+
+        const opToUse = operation || (this.getTutorOperation ? this.getTutorOperation() : '5x6');
+        
+        tutorCamouflageActive = true; 
+
+        // 0. Detener nave inmediatamente y bloquear movimiento
+        isGamePaused = true;
+        window.isGamePaused = true;
+        if (player && player.body) {
+            player.body.setVelocity(0, 0);
+            player.body.setAcceleration(0, 0);
+            player.body.setAngularVelocity(0);
+            player.body.stop();
+        }
+
+        // FASE 1: ESPERA INICIAL
+        this.time.delayedCall(600, () => {
+            
+            // FASE 2: ESCUDO Y SONIDO
+            playShieldSound();
+            let field;
+            if (USE_PRO_ASSETS && this.textures.exists('shield_pro')) {
+                field = this.add.sprite(player.x, player.y, 'shield_pro');
+                field.setScale((window.GLOBAL_SHIELD_SCALE || 1.2) * 0.5);
+                field.setAlpha(0);
+            } else {
+                field = this.add.circle(player.x, player.y, 45);
+                field.setStrokeStyle(4, 0x00FFFF, 1);
+                field.setFillStyle(0x00FFFF, 0.2);
+                field.setAlpha(0);
+            }
+            field.setDepth(4000);
+
+            this.tweens.add({ targets: field, alpha: 0.8, duration: 400 });
+
+            let txtCam = this.add.text(player.x, player.y - 70, "Camuflaje Activado", {
+                fontSize: '24px', fill: '#00FFFF', fontStyle: 'bold', stroke: '#000', strokeThickness: 4, fontFamily: 'monospace'
+            }).setOrigin(0.5).setDepth(4001);
+
+            // FASE 3: DESVANECIMIENTO LENTO (EFECTO CAMUFLAJE)
+            this.time.delayedCall(1200, () => {
+                this.tweens.add({
+                    targets: [player, field, trailEmitter],
+                    alpha: 0.2,
+                    duration: 2000,
+                    ease: 'Sine.easeInOut',
+                    onComplete: () => {
+                        txtCam.destroy();
+                        
+                        // FASE 4: ONDA Y NAVE TRASLUCIDA
+                        const waveColor = USE_PRO_ASSETS ? 0x000000 : 0x00FFFF;
+                        const wave = this.add.circle(player.x, player.y, 10, waveColor, 0.5);
+                        wave.setDepth(3999);
+                        this.tweens.add({
+                            targets: wave,
+                            scale: 10,
+                            alpha: 0,
+                            duration: 1500,
+                            repeat: 2
+                        });
+
+                        this.time.delayedCall(1500, () => {
+                            // FASE 5: COMPUTADORA ACTIVADA + PITOS
+                            let txtComp = this.add.text(player.x, player.y - 70, "Computadora activada", {
+                                fontSize: '24px', fill: '#00FF66', fontStyle: 'bold', stroke: '#000', strokeThickness: 4, fontFamily: 'monospace'
+                            }).setOrigin(0.5).setDepth(4001);
+
+                            this.playRetroBeeps();
+
+                            this.time.delayedCall(1200, () => {
+                                txtComp.destroy();
+                                if (field) field.destroy();
+                                if (wave) wave.destroy();
+                                
+                                // FASE 6: LANZAR COMPUTADORA
+                                this.launchTutorScreen(opToUse);
+                            });
+                        });
+                    }
+                });
+            });
+        });
+    };
+
+    this.setTutorCamouflage = (active) => {
+        // Ocultar/Mostrar UI HTML
+        const uiContainers = ['ui-overlay', 'ui-left-container', 'ui-right-container', 'ui-bottom-right-container', 'debug-panel', 'armeria-panel'];
+        uiContainers.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.style.opacity = active ? '0' : '1';
+                el.style.pointerEvents = active ? 'none' : 'auto';
+            }
+        });
+
+        // Ocultar/Mostrar UI Phaser (Manual Shield, Satellite, etc.)
+        const phaserUI = [
+            manualShieldIcon, manualShieldIconText, manualShieldChargesText,
+            satelliteCapsule, satelliteCapsuleText, satellitePromptMiniOrb, satellitePromptQuestionText
+        ].filter(Boolean);
+        phaserUI.forEach(obj => obj.setVisible(!active));
+
+        if (active) {
+            tutorCamouflageActive = true;
             tutorPausedGame = isGamePaused;
             if (!isGamePaused) {
                 isGamePaused = true;
@@ -606,7 +771,6 @@ function create() {
                 this.physics.pause();
                 this.tweens.pauseAll();
             }
-            if (player) player.setAlpha(0.45);
 
             const pauseButton = document.getElementById('btn-pause');
             if (pauseButton) {
@@ -616,8 +780,15 @@ function create() {
             return;
         }
 
-        if (player) player.setAlpha(1);
+        // --- SALIENDO DEL TUTOR ---
         if (!tutorPausedGame) {
+            // Si NO estaba pausado originalmente, restauramos alpha y reanudamos ya
+            tutorCamouflageActive = false;
+            this.tweens.add({
+                targets: [player, trailEmitter],
+                alpha: 1,
+                duration: 500
+            });
             isGamePaused = false;
             window.isGamePaused = false;
             this.physics.resume();
@@ -629,6 +800,8 @@ function create() {
                 pauseButton.style.backgroundColor = "rgba(0,0,0,0.6)";
             }
         } else {
+            // Estaba pausado antes, así que mantenemos el alpha bajo y la inmunidad (tutorCamouflageActive sigue true)
+            // El jugador tendrá que presionar REANUDAR para salir del camuflaje
             const pauseButton = document.getElementById('btn-pause');
             if (pauseButton) {
                 pauseButton.innerText = "▶ REANUDAR";
@@ -698,6 +871,9 @@ function create() {
         // Mostrar botón de tutor solo en Modo 3 (Supervivencia)
         const btnTutor = document.getElementById('btn-tutor');
         if (btnTutor) btnTutor.style.display = (mode === 3) ? 'block' : 'none';
+
+        // Sincronizar cargas de escudo manual desde el global (Dificultad)
+        manualShieldCharges = window.GLOBAL_MANUAL_SHIELD_CHARGES || 5;
         
         // Sincronización inmediata de Estilo Visual (Pro vs Clásico)
         USE_PRO_ASSETS = window.USE_PRO_ASSETS || false;
@@ -983,10 +1159,44 @@ function create() {
     this.input.keyboard.on('keydown-S', function () {
         requestSatelliteChallenge(this);
     }, this);
+
+    this.input.keyboard.on('keydown-E', function () {
+        activateManualShield(this);
+    }, this);
+
+    this.input.keyboard.on('keydown-C', function () {
+        this.triggerTutorSequence();
+    }, this);
+
+    this.input.keyboard.on('keydown-M', function () {
+        for(let i=0; i<10; i++) spawnEnemy(this);
+    }, this);
+
+    // Configurar el jugador para ser interactivo y detectar doble clic + Long Press
+    player.setInteractive();
+    player.on('pointerdown', (pointer) => {
+        let now = Date.now();
+        playerHoldStartTime = now;
+        
+        // Doble click para Escudo
+        if (now - lastPlayerClickTime < 300) {
+            activateManualShield(this);
+        }
+        lastPlayerClickTime = now;
+    });
+
+    player.on('pointerup', (pointer) => {
+        let holdDuration = Date.now() - playerHoldStartTime;
+        // Long Press para Satélite (iPad)
+        if (holdDuration > 800) {
+            requestSatelliteChallenge(this);
+        }
+        playerHoldStartTime = 0;
+    });
 }
 
 function update() {
-    if (isGameOver) return;
+    if (isGameOver || isGamePaused) return;
 
     // Control Temporal (Singularidad)
     if (singularityActive && !isGamePaused) {
@@ -1083,7 +1293,8 @@ function update() {
             });
         }
 
-        if (score >= 5 && currentCannonAmmo > 0) {
+        let threshold = window.GLOBAL_DIFFICULTY_THRESHOLD || 4;
+        if (score >= threshold && currentCannonAmmo > 0) {
             enemiesGroup.getChildren().forEach(enemy => {
                 if (enemy.active) {
                     let dist = Phaser.Math.Distance.Between(player.x, player.y, enemy.x, enemy.y);
@@ -1241,6 +1452,14 @@ function update() {
         player.rotation = player.body.velocity.angle() + Math.PI / 2;
     }
 
+    // Actualizar temporizador de escudo manual
+    if (manualShieldActive) {
+        manualShieldTimer -= (1000/60);
+        if (manualShieldTimer <= 0) {
+            manualShieldActive = false;
+        }
+    }
+
     // Actualizar visuales del SHIELD si está activo
     if (hasShield) {
         if (USE_PRO_ASSETS && this.textures.exists('shield_pro') && shieldSprite) {
@@ -1275,10 +1494,11 @@ function update() {
     enemiesGroup.children.iterate(function (enemy) {
         if(enemy && enemy.active) {
             // 1. IA DE DISPARO (Solo naves Rojas/Elite y score >= 6)
+            let threshold = window.GLOBAL_DIFFICULTY_THRESHOLD || 4;
             let isElite = enemy.texture && (enemy.texture.key === 'enemyShieldTex' || enemy.texture.key === 'enemy_elite_pro');
-            if (isElite && score >= 6) {
+            if (isElite && score >= threshold + 1) {
                 let distToPlayer = Phaser.Math.Distance.Between(enemy.x, enemy.y, player.x, player.y);
-                let radarRange = 250;
+                let radarRange = window.GLOBAL_ENEMY_RADAR_RADIUS || 250;
                 if (distToPlayer < radarRange) {
                     let forwardAngle = enemy.rotation - Math.PI/2;
                     let angleToPlayer = Phaser.Math.Angle.Between(enemy.x, enemy.y, player.x, player.y);
@@ -1298,10 +1518,10 @@ function update() {
                     if (this.time.now > enemy.lastFireTime + fireRate && Math.abs(diff) < 0.4) {
                         enemy.lastFireTime = this.time.now;
                         let numBullets = 1;
-                        if (score >= 10) numBullets = 5;
-                        else if (score >= 9) numBullets = 4;
-                        else if (score >= 8) numBullets = 3;
-                        else if (score >= 7) numBullets = 2;
+                        if (score >= threshold + 5) numBullets = 5;
+                        else if (score >= threshold + 4) numBullets = 4;
+                        else if (score >= threshold + 3) numBullets = 3;
+                        else if (score >= threshold + 2) numBullets = 2;
                         
                         for(let n=0; n<numBullets; n++) {
                             let spread = (n - (numBullets-1)/2) * 0.1;
@@ -1370,6 +1590,10 @@ function update() {
             }
         }
     }, this);
+
+    // Actualizar UI de Escudo Manual y Satélite
+    updateManualShieldUI(this);
+    updateSatelliteCapsule(this);
 
     // Misiles Homing Update
     if (typeof missilesGroup !== 'undefined') {
@@ -1641,13 +1865,14 @@ function hitAnswerCoin(player, coin) {
         
         if (currentGameMode === 3) {
             let totalEnemies = enemiesGroup.getChildren().length;
+            let threshold = window.GLOBAL_DIFFICULTY_THRESHOLD || 4;
             if (totalEnemies < 20) { // Límite de seguridad para iPad
-                if (score >= 6) {
+                if (score >= threshold + 1) {
                     // Spawn escalonado para no saturar las físicas en un solo frame
                     for(let k=0; k<4; k++) {
                         this.time.delayedCall(100 * (k+1), () => { if(!isGameOver) spawnEnemy(this); });
                     }
-                } else if (score >= 5) {
+                } else if (score >= threshold) {
                     this.time.delayedCall(100, () => { if(!isGameOver) spawnEnemy(this); });
                     this.time.delayedCall(200, () => { if(!isGameOver) spawnEnemy(this); });
                 }
@@ -1877,7 +2102,17 @@ function spawnWall(scene) {
     let numPerlasBase = 10;
     let perlaPaso = wallArc / (numPerlasBase - 1);
     let perlasPorCrecimiento = 3; // Crece de 3 en 3
-    let maxGrowths = 3; // 3 crecimientos = 9 perlas extras por hueco
+    
+    // Determinar apertura mínima basada en el tamaño de la nave (hitbox)
+    // Se deja una apertura de al menos 2 veces el tamaño de la nave para asegurar el paso.
+    let shipSize = player.body.radius * 2;
+    let minOpeningPixels = shipSize * 2.0; 
+    let effectiveRadius = config.width * 0.15; // Radio central donde la nave interactúa
+    let minOpeningAngle = minOpeningPixels / effectiveRadius;
+    let initialGapAngle = angularStep - wallArc;
+    
+    let maxGrowths = Math.floor((initialGapAngle - minOpeningAngle) / (perlasPorCrecimiento * perlaPaso));
+    maxGrowths = Math.max(0, maxGrowths);
     
     let availableGaps = [];
     for(let i=0; i<4; i++) {
@@ -2034,6 +2269,10 @@ function showSatelliteBriefing(scene) {
 }
 
 function requestSatelliteChallenge(scene) {
+    if (satelliteChallengeActive) {
+        clearSatelliteChallenge(scene, true); // Desactivar si ya está activo
+        return;
+    }
     if (!isSatelliteDefenseEligible() || satelliteActive) return;
     if (!window.SatelliteDefense) {
         showMathVoiceMessage(scene, "SAT no disponible", '#FFCC00');
@@ -2207,13 +2446,13 @@ function updateSatelliteDefense(scene) {
     let sy;
     if (target) {
         satelliteLockAngle = Phaser.Math.Angle.Between(player.x, player.y, target.x, target.y);
-        const zigzagSpeed = window.GLOBAL_SATELLITE_ZIGZAG_SPEED || 0.026;
+        const zigzagSpeed = window.GLOBAL_SATELLITE_ZIGZAG_SPEED || 0.0208;
         const zigzagArc = window.GLOBAL_SATELLITE_ZIGZAG_ARC !== undefined ? window.GLOBAL_SATELLITE_ZIGZAG_ARC : 0.24;
         const zigzag = Math.sin(scene.time.now * zigzagSpeed) * zigzagArc;
         sx = player.x + Math.cos(satelliteLockAngle + zigzag) * orbitRadius;
         sy = player.y + Math.sin(satelliteLockAngle + zigzag) * orbitRadius;
     } else {
-        satelliteAngle += window.GLOBAL_SATELLITE_ORBIT_SPEED || 0.18;
+        satelliteAngle += window.GLOBAL_SATELLITE_ORBIT_SPEED || 0.144;
         sx = player.x + Math.cos(satelliteAngle) * orbitRadius;
         sy = player.y + Math.sin(satelliteAngle) * orbitRadius;
     }
@@ -2366,16 +2605,17 @@ function spawnEnemy(scene) {
     enemy.body.setBounce(1, 1); 
     
     // Asignación de Puntos de Vida y Escudo
-    enemy.hp = 1;
+    enemy.hp = window.GLOBAL_ENEMY_NORMAL_HP || 1;
     let enemyColor = 0x000000; // Negro por defecto
     let baseScale = (USE_PRO_ASSETS && scene.textures.exists('enemy_pro')) ? (window.GLOBAL_ENEMY_SCALE || 0.1) : 1.0;
     
     if (currentGameMode === 3 && score >= 3) {
         let chance = (window.GLOBAL_SHIELD_CHANCE !== undefined) ? window.GLOBAL_SHIELD_CHANCE : 0.25;
         if (Math.random() < chance) {
-            enemy.hp = 3;
+            enemy.hp = window.GLOBAL_ENEMY_ELITE_HP || 3;
             if (USE_PRO_ASSETS && scene.textures.exists('enemy_elite_pro')) {
                 enemy.setTexture('enemy_elite_pro');
+                enemy.clearTint(); 
                 baseScale = window.GLOBAL_ENEMY_ELITE_SCALE || 0.12; 
             } else {
                 enemy.setTexture('enemyShieldTex');
@@ -2478,7 +2718,7 @@ function getConfiguredDamage(value, fallbackAmount) {
 }
 
 function takeDamage(scene, amount) {
-    if (tutorCamouflageActive) {
+    if (tutorCamouflageActive || manualShieldActive) {
         return;
     }
 
@@ -2488,15 +2728,27 @@ function takeDamage(scene, amount) {
         
         // Efecto visual instantáneo del escudo
         playShieldSound();
-        let reactionShield = scene.add.circle(player.x, player.y, 40);
-        reactionShield.setStrokeStyle(4, 0x00FFFF, 1);
+        
+        let visualShield;
+        if (USE_PRO_ASSETS && scene.textures.exists('shield_pro')) {
+            // Modo Pro: Usar el asset de campo de energía real
+            visualShield = scene.add.sprite(player.x, player.y, 'shield_pro');
+            visualShield.setScale((window.GLOBAL_SHIELD_SCALE || 1.2) * 0.5);
+            visualShield.setAlpha(window.GLOBAL_SHIELD_ALPHA || 0.4);
+            visualShield.setDepth(3100);
+        } else {
+            // Modo Geométrico: Mantener la onda expansiva azul
+            visualShield = scene.add.circle(player.x, player.y, 40);
+            visualShield.setStrokeStyle(4, 0x00FFFF, 1);
+        }
+
         scene.tweens.add({
-            targets: reactionShield,
-            scale: 1.5,
+            targets: visualShield,
+            scale: USE_PRO_ASSETS ? (visualShield.scale * 1.1) : 1.5,
             alpha: 0,
             duration: 400,
-            onUpdate: () => { reactionShield.setPosition(player.x, player.y); },
-            onComplete: () => reactionShield.destroy()
+            onUpdate: () => { visualShield.setPosition(player.x, player.y); },
+            onComplete: () => visualShield.destroy()
         });
         return; // Bloquea el daño consumiendo carga
     }
@@ -2570,14 +2822,11 @@ function hitEnemyWithWeapon(weapon, enemy) {
             onComplete: () => { hitRing.destroy(); }
         });
         
-        // Degradar color de escudo progresivamente
+        // Degradar color de escudo progresivamente (solo visual, ya no cambia de nave)
         if (enemy.hp === 2) {
-            enemy.setTint(0x880000); // Rojo Granate (Dañado)
-        } else {
-            // Escudo roto: Cambia a textura normal, escala normal y color negro
-            enemy.setTexture('enemyTex');
-            enemy.setTint(0x000000); 
-            enemy.setScale(1.0);
+            if (!USE_PRO_ASSETS) enemy.setTint(0x880000); // Solo en modo geométrico
+        } else if (enemy.hp === 1) {
+             if (!USE_PRO_ASSETS) enemy.setTint(0x440000); // Más oscuro en geométrico
         }
         
         weapon.destroy(); 
@@ -2594,11 +2843,12 @@ function hitEnemyWithWeapon(weapon, enemy) {
 }
 
 function hitEnemy(player, enemy) {
-    if(isGameOver) return;
+    if(isGameOver || tutorCamouflageActive) return;
 
-    if (hasShield) { // Escudo Neon rompe enemigos!
+    if (hasShield || manualShieldActive) {
         playExplosion();
-        let ring = this.add.circle(enemy.x, enemy.y, 15, 0x00FFFF);
+        let ringColor = manualShieldActive ? 0x00FFFF : 0x00FFFF;
+        let ring = this.add.circle(enemy.x, enemy.y, 15, ringColor);
         this.tweens.add({ targets: ring, scale: 3, alpha: 0, duration: 200, onComplete: () => { ring.destroy(); }});
         enemy.destroy();
         this.cameras.main.shake(50, 0.005);
@@ -2624,7 +2874,7 @@ function triggerGameOver(scene) {
     clearSatelliteCapsule(scene);
     playerInputFrozen = false;
     releaseFreezeWhenPointerNear = false;
-    player.setTint(0xff0000);
+    if (!USE_PRO_ASSETS) player.setTint(0xff0000);
     player.body.moves = false;
     trailEmitter.stop();
 
@@ -2675,8 +2925,9 @@ function triggerGameOver(scene) {
 }
 
 function hitRingWall(player, ringSegment) {
-    if(isGameOver) return;
-    
+    if (isGameOver || tutorCamouflageActive) return;
+
+    playExplosion();
     // Si estamos en Modo Pro, aumentamos la fuerza de rebote
     if (window.USE_PRO_ASSETS) {
         let bounceForce = 450;
@@ -2751,11 +3002,12 @@ function fireCannons(scene) {
     
     let bulletSpeed = window.GLOBAL_BULLET_SPEED || 800;
     let cannonOffsets = [];
+    let threshold = window.GLOBAL_DIFFICULTY_THRESHOLD || 4;
     
-    if (score >= 8) cannonOffsets = [0, -15, 15, -30, 30]; // 5 cañones
-    else if (score >= 7) cannonOffsets = [-10, 10, -25, 25]; // 4 cañones
-    else if (score >= 6) cannonOffsets = [-15, 15]; // 2 cañones
-    else if (score >= 5) cannonOffsets = [0]; // 1 cañon
+    if (score >= threshold + 3) cannonOffsets = [0, -15, 15, -30, 30]; // 5 cañones
+    else if (score >= threshold + 2) cannonOffsets = [-10, 10, -25, 25]; // 4 cañones
+    else if (score >= threshold + 1) cannonOffsets = [-15, 15]; // 2 cañones
+    else if (score >= threshold) cannonOffsets = [0]; // 1 cañon
     
     let baseAngle = player.rotation - Math.PI / 2;
     
@@ -2824,5 +3076,73 @@ function fireMissiles(scene, target) {
                 }
             });
         }
+    }
+}
+
+function activateManualShield(scene) {
+    if (isGameOver || manualShieldActive || manualShieldCharges <= 0) return;
+    
+    manualShieldActive = true;
+    manualShieldTimer = window.GLOBAL_MANUAL_SHIELD_DURATION || 600;
+    manualShieldCharges--;
+    
+    playShieldSound();
+    
+    let visualShield;
+    if (USE_PRO_ASSETS && scene.textures.exists('shield_pro')) {
+        visualShield = scene.add.sprite(player.x, player.y, 'shield_pro');
+        visualShield.setScale((window.GLOBAL_SHIELD_SCALE || 1.2) * 0.5);
+        visualShield.setAlpha(window.GLOBAL_SHIELD_ALPHA || 0.4);
+        visualShield.setDepth(3100);
+    } else {
+        visualShield = scene.add.circle(player.x, player.y, 40);
+        visualShield.setStrokeStyle(4, 0x00FFFF, 1);
+    }
+
+    scene.tweens.add({
+        targets: visualShield,
+        scale: USE_PRO_ASSETS ? (visualShield.scale * 1.1) : 1.5,
+        alpha: 0,
+        duration: manualShieldTimer,
+        onUpdate: () => { visualShield.setPosition(player.x, player.y); },
+        onComplete: () => visualShield.destroy()
+    });
+}
+
+function updateManualShieldUI(scene) {
+    if (currentGameMode !== 3 || isGameOver) {
+        if (manualShieldIcon) {
+            manualShieldIcon.destroy(); manualShieldIcon = null;
+            manualShieldIconText.destroy(); manualShieldIconText = null;
+            manualShieldChargesText.destroy(); manualShieldChargesText = null;
+        }
+        return;
+    }
+
+    if (!manualShieldIcon) {
+        let x = config.width - 82;
+        let y = (config.height / 2) - 120; // Sobre el satélite
+
+        manualShieldIcon = scene.add.circle(x, y, 35);
+        manualShieldIcon.setStrokeStyle(3, 0x00FFFF, 0.9);
+        manualShieldIcon.setFillStyle(0x002244, 0.2);
+        manualShieldIcon.setDepth(3200);
+        manualShieldIcon.setInteractive({ useHandCursor: true });
+        manualShieldIcon.on('pointerdown', () => activateManualShield(scene));
+
+        manualShieldIconText = scene.add.text(x, y, 'SHIELD', {
+            fontSize: '16px', fill: '#00FFFF', align: 'center', fontStyle: 'bold', fontFamily: 'monospace'
+        }).setOrigin(0.5).setDepth(3201);
+
+        manualShieldChargesText = scene.add.text(x, y + 45, `CHARGES: ${manualShieldCharges}`, {
+            fontSize: '14px', fill: '#00FFFF', align: 'center', fontStyle: 'bold', fontFamily: 'monospace'
+        }).setOrigin(0.5).setDepth(3201);
+
+        scene.tweens.add({
+            targets: [manualShieldIcon, manualShieldIconText, manualShieldChargesText],
+            alpha: 0.5, duration: 800, yoyo: true, repeat: -1
+        });
+    } else {
+        manualShieldChargesText.setText(`CHARGES: ${manualShieldCharges}`);
     }
 }
