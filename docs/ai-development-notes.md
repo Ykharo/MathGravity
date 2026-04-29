@@ -243,4 +243,50 @@ Ideas futuras razonables:
 - Crear una vista/panel de estadisticas dentro del menu para no depender de consola.
 - Usar `MathProgress` para sugerir practicas futuras sin crear ayudas arcade en modos 1 y 2.
 - Crear botones UI de export/import JSON por perfil.
-- Evaluar `IndexedDB` solo si el historial crece mucho o aparecen multiples estudiantes/dispositivos.
+### Modulo: ComputerTutor (RetroMathComputer) - ESTADO ACTUAL (ABRIL 2026)
+
+- **Ubicación**: `labs/computer-tutor/`, `src/core/computerTutor/`, `src/phaser/computerTutor/`, `tests/computerTutor/`.
+- **Arquitectura**: Lógica pura modular (Core) + Escenas Phaser (UI). Independiente pero integrado.
+- **Estado**: **COMPLETADO E INTEGRADO**.
+- **Interfaz**: Consola MG-88 táctica. Soporta teclado y iPad (hit-areas ampliadas).
+- **Estética**: Retro Monocromático (Verde Fósforo). Achurado (Hatching) para distinguir áreas.
+- **Localización**: 100% en Español (etiquetas, pistas y errores).
+- **Mecánicas Educativas Implementadas**: 
+    - **Área (G3)**: Tablas generales con descomposición y achurado.
+    - **Sustracción (G2-9)**: Estrategia de "Casi 10" para la tabla del 9.
+    - **Conteo Rítmico (G1-5)**: Secuencia animada para la tabla del 5.
+    - **Dobles (G1-2)**: Estrategia de suma duplicada para la tabla del 2.
+    - **Agregar Cero (G1-10)**: Truco del valor posicional para la tabla del 10.
+- **Feedback**: Sistema de audio retro (Paso, Éxito, Error) y efectos de sacudida (Shake) en validaciones fallidas.
+- **Refinamientos Finales (Abril 2026)**:
+    - **Rotación Pedagógica**: Implementada la propiedad conmutativa automática en el Grupo 3 para asegurar siempre 5 columnas de referencia (ej: `7x3` se convierte en `3x7`).
+    - **Tablas Especiales**: Las tablas del 2, 5 y 10 mantienen su forma natural (no se rotan) para mayor simplicidad.
+    - **Mapas Algebraicos**: Limpieza de redundancias; solo muestran transpuesta si hubo rotación.
+    - **Input Robusto**: El analizador ahora acepta formatos como `5X8`, `5*8` y variaciones con espacios.
+    - **Guías de Dimensión**: Estandarizadas en todas las mecánicas, incluyendo las especiales (2, 5, 10).
+    - **Consistencia Visual**: Unificación total al verde neón MG-88 y ajuste de opacidad de iconos al 80%.
+
+## Reglas para futuras sesiones de AI
+
+- El `ComputerTutor` debe mantenerse aislado en su carpeta; no agregar dependencias de `game.js` en su `core`.
+- La integración en `game.js` se limita a la llamada de apertura (`openTutor`) y la pausa de escena.
+- Cualquier nueva estrategia pedagógica debe implementarse primero como una clase en `src/phaser/computerTutor/mechanics/`.
+- Mantener la estética retro-monocromática (usar solo verde fósforo y achurado).
+
+## Siguiente paso sugerido
+
+1.  **Ajuste Fino de Audio**: Reemplazar los placeholders (`laser.mp3`, `success.mp3`) por archivos específicos con sonido "8-bit computer" grabados en `assets/audio/computerTutor/`.
+2.  **Integración Avanzada**: Hacer que el tutor se abra automáticamente cuando el jugador comete 3 errores seguidos en una misma multiplicación en Modo 3.
+3.  **Visualización de Errores**: Integrar las estadísticas de `MathProgress` dentro de la pantalla de análisis del tutor.
+
+Pedido recomendado para el proximo chat:
+
+```text
+Hola, lee primero docs/ai-development-notes.md.
+El ComputerTutor ya está integrado y funcional. 
+Reglas:
+- No romper la independencia del módulo tutor.
+- Mantener la estética retro MG-88.
+- Verificar cambios en labs/computer-tutor/index.html y en el juego principal.
+```
+

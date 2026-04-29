@@ -551,19 +551,22 @@
             armeria.style.display = (armeria.style.display === 'none') ? 'block' : 'none';
         }
 
-        // PWA Offline Registration
-        // Service Worker desactivado para evitar problemas de caché en desarrollo
-        /*
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js').then(reg => {
-                    console.log('SW Registered:', reg.scope);
-                }).catch(err => {
-                    console.log('SW Error:', err);
-                });
-            });
+        function openTutor(op = '5x6') {
+            if (window.gameScene && window.game) {
+                // Pausar si no está pausado
+                if (!window.isGamePaused) {
+                    window.gameScene.togglePause();
+                }
+                
+                // Asegurar que las escenas estén registradas (si se cargaron vía module)
+                if (window.ComputerTutorBoot && !window.game.scene.getScene('ComputerTutorBoot')) {
+                    window.game.scene.add('ComputerTutorBoot', window.ComputerTutorBoot);
+                    window.game.scene.add('ComputerTutorScene', window.ComputerTutorScene);
+                }
+
+                window.game.scene.start('ComputerTutorBoot', { op });
+            }
         }
-        */
     </script>
 </head>
 <body>
@@ -629,6 +632,9 @@
         </button>
         <button onclick="toggleLab()" style="font-size: 18px; cursor: pointer; background: rgba(0,0,0,0.6); color: white; border: 1px solid white; border-radius: 8px; padding: 8px 12px; font-family: monospace;">
             ⚙️ LAB
+        </button>
+        <button id="btn-tutor" onclick="openTutor()" style="display: none; font-size: 18px; cursor: pointer; background: rgba(0,40,0,0.8); color: #0f0; border: 1px solid #0f0; border-radius: 8px; padding: 8px 12px; font-family: monospace;">
+            💻 TUTOR
         </button>
     </div>
 
@@ -784,6 +790,18 @@
     <script src="src/core/mathSpeech.js"></script>
     <script src="src/core/satelliteDefense.js"></script>
     <script src="src/core/mathProgress.js"></script>
+
+    <!-- Computer Tutor (Standalone Module) -->
+    <script src="src/core/computerTutor/multiplicationParser.js"></script>
+    <script src="src/core/computerTutor/tableDiscriminator.js"></script>
+    <script src="src/core/computerTutor/areaModelCalculator.js"></script>
+    <script type="module">
+        import ComputerTutorBoot from './src/phaser/computerTutor/ComputerTutorBoot.js';
+        import ComputerTutorScene from './src/phaser/computerTutor/ComputerTutorScene.js';
+        window.ComputerTutorBoot = ComputerTutorBoot;
+        window.ComputerTutorScene = ComputerTutorScene;
+    </script>
+
     <script src="game.js"></script>
 </body>
 </html>

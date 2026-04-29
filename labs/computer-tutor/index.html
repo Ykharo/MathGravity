@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Computer Tutor Lab - MathGravity</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        #lab-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #0f0;
+            pointer-events: none;
+            z-index: 100;
+        }
+        .retro-text {
+            text-shadow: 0 0 5px #0f0;
+            font-size: 14px;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+</head>
+<body>
+    <div id="ui-layer">
+        <div class="retro-text">SYSTEM: RETRO MATH COMPUTER LAB</div>
+        <div class="retro-text">STATUS: STANDALONE_MODULE</div>
+    </div>
+    <div id="lab-container"></div>
+    
+    <!-- Core Logic (Dual Compatible) -->
+    <script src="../../src/core/computerTutor/multiplicationParser.js"></script>
+    <script src="../../src/core/computerTutor/tableDiscriminator.js"></script>
+    <script src="../../src/core/computerTutor/areaModelCalculator.js"></script>
+
+    <script type="module" src="lab-main.js"></script>
+</body>
+</html>

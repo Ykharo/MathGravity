@@ -631,6 +631,10 @@ function create() {
         pendingTableSteps = [1,2,3,4,5,6,7,8,9,10];
         window.blockTypeMemory = {};
         
+        // Mostrar botón de tutor solo en Modo 3 (Supervivencia)
+        const btnTutor = document.getElementById('btn-tutor');
+        if (btnTutor) btnTutor.style.display = (mode === 3) ? 'block' : 'none';
+        
         // Sincronización inmediata de Estilo Visual (Pro vs Clásico)
         USE_PRO_ASSETS = window.USE_PRO_ASSETS || false;
         this.cameras.main.setBackgroundColor(USE_PRO_ASSETS ? '#000000' : '#F57C00');
@@ -730,6 +734,10 @@ function create() {
         globalRingRotation = 0;
         dibujarYCrearParedesAnillo(this);
         
+        // Ocultar botón de tutor
+        const btnTutor = document.getElementById('btn-tutor');
+        if (btnTutor) btnTutor.style.display = 'none';
+
         isGamePaused = true;
     };
 
