@@ -98,6 +98,8 @@ let currentMissileAmmo = 0;
 let lastFireTime = 0;
 let isRadarLocked = false;
 let playerShieldCharges = 0;
+let ghostModeActive = false;
+let ghostCamouflageActive = false;
 let enemyBulletsGroup;
 let enemyRadarGraphics = null;
 let satelliteCharges = 0;
@@ -811,6 +813,36 @@ function create() {
 
         tutorPausedGame = false;
     };
+
+    this.setGhostCamouflage = (active) => {
+        ghostCamouflageActive = active;
+        const btnGhost = document.getElementById('btn-ghost');
+        
+        if (active) {
+            player.setAlpha(0.2);
+            if (trailEmitter) trailEmitter.setAlpha(0.2);
+            if (btnGhost) {
+                btnGhost.innerText = "👻 GHOST ON";
+                btnGhost.style.background = "rgba(0, 255, 0, 0.4)";
+                btnGhost.style.borderColor = "#0f0";
+                btnGhost.style.color = "#0f0";
+            }
+        } else {
+            player.setAlpha(1);
+            if (trailEmitter) trailEmitter.setAlpha(1);
+            if (btnGhost) {
+                btnGhost.innerText = "👻 GHOST OFF";
+                btnGhost.style.background = "rgba(80, 80, 80, 0.8)";
+                btnGhost.style.borderColor = "#fff";
+                btnGhost.style.color = "#fff";
+            }
+        }
+    };
+
+    window.toggleGhostCamouflage = () => {
+        if (!ghostModeActive) return;
+        this.setGhostCamouflage(!ghostCamouflageActive);
+    };
     
     this.triggerSingularity = () => {
         if (singularityCharges >= 3 && !singularityActive && gameLevel >= 2 && !isGamePaused) {
@@ -871,6 +903,18 @@ function create() {
         // Mostrar botón de tutor solo en Modo 3 (Supervivencia)
         const btnTutor = document.getElementById('btn-tutor');
         if (btnTutor) btnTutor.style.display = (mode === 3) ? 'block' : 'none';
+
+        // Gestión de Modo Ghost
+        ghostModeActive = (window.GLOBAL_DIFFICULTY_MODE === 'Ghost');
+        const btnGhost = document.getElementById('btn-ghost');
+        if (btnGhost) {
+            btnGhost.style.display = ghostModeActive ? 'block' : 'none';
+        }
+        if (ghostModeActive) {
+            this.setGhostCamouflage(true);
+        } else {
+            ghostCamouflageActive = false;
+        }
 
         // Sincronizar cargas de escudo manual desde el global (Dificultad)
         manualShieldCharges = window.GLOBAL_MANUAL_SHIELD_CHARGES || 5;
@@ -977,9 +1021,13 @@ function create() {
         globalRingRotation = 0;
         dibujarYCrearParedesAnillo(this);
         
-        // Ocultar botón de tutor
+        // Ocultar botón de tutor y ghost
         const btnTutor = document.getElementById('btn-tutor');
         if (btnTutor) btnTutor.style.display = 'none';
+        const btnGhost = document.getElementById('btn-ghost');
+        if (btnGhost) btnGhost.style.display = 'none';
+        ghostCamouflageActive = false;
+        ghostModeActive = false;
 
         isGamePaused = true;
         window.isGamePaused = true;
@@ -1146,7 +1194,28 @@ function create() {
         if (!isGameOver) {
             targetX = pointer.x;
             targetY = pointer.y;
+
+            // --- GESTOS GLOBALES (iPad) ---
+            let now = Date.now();
+            playerHoldStartTime = now;
+            
+            // Doble click para Escudo Manual
+            if (now - lastPlayerClickTime < 300) {
+                activateManualShield(this);
+            }
+            lastPlayerClickTime = now;
         }
+    }, this);
+
+    this.input.on('pointerup', function (pointer) {
+        if (isGameOver) return;
+        
+        let holdDuration = Date.now() - playerHoldStartTime;
+        // Long Press para Satélite (iPad) - Cualquier parte de la pantalla
+        if (holdDuration > 800) {
+            requestSatelliteChallenge(this);
+        }
+        playerHoldStartTime = 0;
     }, this);
     
     this.input.on('pointermove', function (pointer) {
@@ -1172,27 +1241,8 @@ function create() {
         for(let i=0; i<10; i++) spawnEnemy(this);
     }, this);
 
-    // Configurar el jugador para ser interactivo y detectar doble clic + Long Press
+    // Configurar el jugador para ser interactivo
     player.setInteractive();
-    player.on('pointerdown', (pointer) => {
-        let now = Date.now();
-        playerHoldStartTime = now;
-        
-        // Doble click para Escudo
-        if (now - lastPlayerClickTime < 300) {
-            activateManualShield(this);
-        }
-        lastPlayerClickTime = now;
-    });
-
-    player.on('pointerup', (pointer) => {
-        let holdDuration = Date.now() - playerHoldStartTime;
-        // Long Press para Satélite (iPad)
-        if (holdDuration > 800) {
-            requestSatelliteChallenge(this);
-        }
-        playerHoldStartTime = 0;
-    });
 }
 
 function update() {
@@ -1497,9 +1547,12 @@ function update() {
             let threshold = window.GLOBAL_DIFFICULTY_THRESHOLD || 4;
             let isElite = enemy.texture && (enemy.texture.key === 'enemyShieldTex' || enemy.texture.key === 'enemy_elite_pro');
             if (isElite && score >= threshold + 1) {
+                // MODO GHOST: No detectar al jugador si tiene el camuflaje activo
                 let distToPlayer = Phaser.Math.Distance.Between(enemy.x, enemy.y, player.x, player.y);
                 let radarRange = window.GLOBAL_ENEMY_RADAR_RADIUS || 250;
-                if (distToPlayer < radarRange) {
+                
+                let canDetect = !ghostCamouflageActive;
+                if (distToPlayer < radarRange && canDetect) {
                     let forwardAngle = enemy.rotation - Math.PI/2;
                     let angleToPlayer = Phaser.Math.Angle.Between(enemy.x, enemy.y, player.x, player.y);
                     let diff = Phaser.Math.Angle.Wrap(angleToPlayer - forwardAngle);
@@ -1566,26 +1619,37 @@ function update() {
                     // Mantienen la velocidad de spawn (rebote automático por Arcade Physics)
                 } else {
                     // Nivel 2+: Enjambre (Boids)
-                    let anguloJugador = Phaser.Math.Angle.Between(enemy.x, enemy.y, player.x, player.y);
-                    let anguloObjetivo = anguloJugador + Math.PI / 2;
-                    let diffRot = Phaser.Math.Angle.ShortestBetween(Phaser.Math.RadToDeg(enemy.rotation), Phaser.Math.RadToDeg(anguloObjetivo));
-                    enemy.rotation += Phaser.Math.DegToRad(diffRot) * (timeDilation === 1.0 ? 1.0 : 0.05 * timeDilation);
+                    // MODO GHOST: No perseguir si el camuflaje está activo
+                    let targetX = player.x;
+                    let targetY = player.y;
                     
-                    let speed = 45 * timeDilation;
-                    let vX = Math.cos(anguloJugador) * speed;
-                    let vY = Math.sin(anguloJugador) * speed;
-                    
-                    enemiesGroup.getChildren().forEach(otro => {
-                        if (otro !== enemy && otro.active) {
-                            let dx = enemy.x - otro.x; let dy = enemy.y - otro.y; let dist2 = dx*dx + dy*dy;
-                            if (dist2 > 0 && dist2 < 2500) { 
-                                let distReal = Math.sqrt(dist2);
-                                let panico = (50 - distReal) * 2 * timeDilation;
-                                vX += (dx / distReal) * panico; vY += (dy / distReal) * panico;
+                    if (ghostCamouflageActive) {
+                        // Si no me ven, deambulan o mantienen rumbo inercial
+                        // Usamos un punto aleatorio lejano o simplemente no rotan hacia el jugador
+                        enemy.rotation += 0.01 * timeDilation; 
+                        enemy.body.setAcceleration(0, 0);
+                    } else {
+                        let anguloJugador = Phaser.Math.Angle.Between(enemy.x, enemy.y, player.x, player.y);
+                        let anguloObjetivo = anguloJugador + Math.PI / 2;
+                        let diffRot = Phaser.Math.Angle.ShortestBetween(Phaser.Math.RadToDeg(enemy.rotation), Phaser.Math.RadToDeg(anguloObjetivo));
+                        enemy.rotation += Phaser.Math.DegToRad(diffRot) * (timeDilation === 1.0 ? 1.0 : 0.05 * timeDilation);
+                        
+                        let speed = 45 * timeDilation;
+                        let vX = Math.cos(anguloJugador) * speed;
+                        let vY = Math.sin(anguloJugador) * speed;
+                        
+                        enemiesGroup.getChildren().forEach(otro => {
+                            if (otro !== enemy && otro.active) {
+                                let dx = enemy.x - otro.x; let dy = enemy.y - otro.y; let dist2 = dx*dx + dy*dy;
+                                if (dist2 > 0 && dist2 < 2500) { 
+                                    let distReal = Math.sqrt(dist2);
+                                    let panico = (50 - distReal) * 2 * timeDilation;
+                                    vX += (dx / distReal) * panico; vY += (dy / distReal) * panico;
+                                }
                             }
-                        }
-                    });
-                    enemy.body.setVelocity(vX, vY);
+                        });
+                        enemy.body.setVelocity(vX, vY);
+                    }
                 }
             }
         }
@@ -2718,8 +2782,8 @@ function getConfiguredDamage(value, fallbackAmount) {
 }
 
 function takeDamage(scene, amount) {
-    if (tutorCamouflageActive || manualShieldActive) {
-        return;
+    if (tutorCamouflageActive || manualShieldActive || ghostCamouflageActive) {
+        return; // Inmune durante tutor, escudo manual o modo fantasma
     }
 
     // Escudo defensivo reactivo por cargas (Modo 3, 10+ respuestas)
