@@ -895,6 +895,7 @@ function create() {
 
     this.startGameMode = (mode) => {
         currentGameMode = mode;
+        window.currentGameMode = mode;
         currentTableIndex = 0;
         currentStep = 1;
         pendingTableSteps = [1,2,3,4,5,6,7,8,9,10];
@@ -986,6 +987,7 @@ function create() {
         tutorCamouflageActive = false;
         tutorPausedGame = false;
         isGameOver = false;
+        window.isGameOver = false;
         clearArrivalSonar(this);
         clearSatelliteDefense(this);
         clearSatelliteCapsule(this);
@@ -1000,6 +1002,7 @@ function create() {
 
     this.returnToMenu = () => {
         currentGameMode = 0;
+        window.currentGameMode = 0;
         clearArrivalSonar(this);
         clearSatelliteDefense(this);
         clearSatelliteCapsule(this);
@@ -1898,6 +1901,14 @@ function hitAnswerCoin(player, coin) {
         score++;
         document.getElementById('score').innerText = score;
         
+        // RECARGA DE ESCUDO MANUAL: +1 carga cada 2 aciertos (Máximo 5)
+        if (score % 2 === 0) {
+            manualShieldCharges = Math.min(5, manualShieldCharges + 1);
+            if (manualShieldChargesText) {
+                manualShieldChargesText.setText(manualShieldCharges.toString());
+            }
+        }
+        
         // RECUPERACIÓN DE VIDA: +20% por acierto (Máximo 100)
         playerHealth = Math.min(100, playerHealth + 20);
         
@@ -2096,11 +2107,18 @@ function spawnAnswerCoins(scene, prob) {
         let attempts = 0;
         
         while (!validPosition && attempts < 50) {
-            x = Phaser.Math.Between(50, config.width - 50);
-            y = Phaser.Math.Between(180, config.height - 80); 
+            attempts++;
+            // Margenes aumentados para evitar esquinas de UI (iPad, Menus, Controles)
+            let marginH = 220;
+            let marginVTop = 220;
+            let marginVBottom = 200;
+            
+            x = Phaser.Math.Between(marginH, config.width - marginH);
+            y = Phaser.Math.Between(marginVTop, config.height - marginVBottom); 
             
             validPosition = true;
             
+            // Evitar solapamiento con otras monedas
             for (let j = 0; j < spawnedPositions.length; j++) {
                 if (Phaser.Math.Distance.Between(x, y, spawnedPositions[j].x, spawnedPositions[j].y) < 100) {
                     validPosition = false;

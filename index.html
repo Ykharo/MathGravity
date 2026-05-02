@@ -122,7 +122,7 @@
 
         #ui-overlay {
             position: absolute;
-            top: 80px; /* Bajado otros 30px (50 -> 80) */
+            top: 100px; /* Bajado para evitar tapar el juego */
             width: 100%;
             text-align: center;
             color: white;
@@ -334,6 +334,9 @@
         var GLOBAL_RADIO_GIRO = 8.0;
         var GLOBAL_AUTOPILOT = true;
         var GLOBAL_VALID_TABLES = [3,4,5,6,7,8,9];
+        window.isGameOver = false;
+        window.isGamePaused = false;
+        window.currentGameMode = 0;
         
         // --- Armeria Variables ---
         var GLOBAL_CANNON_AMMO = 5;
@@ -516,6 +519,7 @@
         }
 
         function startGameFromMenu(mode) {
+            document.getElementById('btn-resume-game').style.display = 'none';
             if (window.MathProgress) {
                 const selector = document.getElementById('profile-selector');
                 window.ACTIVE_PROFILE_ID = window.MathProgress.setActiveProfileId(selector ? selector.value : window.ACTIVE_PROFILE_ID);
@@ -536,13 +540,28 @@
         }
         
         function returnToMenu() {
-            document.getElementById('main-menu').style.display = 'flex';
-            document.getElementById('btn-back-menu').style.display = 'none';
-            if (window.gameScene) {
-                window.gameScene.returnToMenu();
+            if (window.gameScene && !window.isGameOver && (window.currentGameMode > 0)) {
+                if (!window.isGamePaused) window.gameScene.togglePause();
+                document.getElementById('main-menu').style.display = 'flex';
+                document.getElementById('btn-resume-game').style.display = 'flex';
+                document.getElementById('btn-back-menu').style.display = 'none';
+            } else {
+                document.getElementById('main-menu').style.display = 'flex';
+                document.getElementById('btn-resume-game').style.display = 'none';
+                document.getElementById('btn-back-menu').style.display = 'none';
+                if (window.gameScene) window.gameScene.returnToMenu();
             }
         }
-        
+
+        function resumeGame() {
+            document.getElementById('main-menu').style.display = 'none';
+            document.getElementById('btn-back-menu').style.display = 'block';
+            document.getElementById('btn-resume-game').style.display = 'none';
+            if (window.gameScene && window.isGamePaused) {
+                window.gameScene.togglePause();
+            }
+        }
+
         function togglePause() {
             if (window.gameScene) window.gameScene.togglePause();
         }
@@ -628,6 +647,66 @@
                 window.gameScene.triggerTutorSequence(operation);
             }
         }
+
+        // --- PERSISTENCIA DE AJUSTES ---
+        function savePhysicsSettings() {
+            const settings = {
+                validTables: GLOBAL_VALID_TABLES,
+                ringRadius: window.GLOBAL_RING_RADIUS_PCT,
+                ringActive: document.getElementById('chkRingActive').checked
+            };
+            localStorage.setItem('mathGravityPhysicsSettings', JSON.stringify(settings));
+            
+            // Efecto visual de guardado
+            const btn = document.getElementById('btn-save-physics');
+            const originalText = btn.innerText;
+            btn.innerText = "¡GUARDADO!";
+            btn.style.background = "#fff";
+            setTimeout(() => {
+                btn.innerText = originalText;
+                btn.style.background = "#0f0";
+            }, 1000);
+        }
+
+        function loadPhysicsSettings() {
+            const saved = localStorage.getItem('mathGravityPhysicsSettings');
+            if (saved) {
+                try {
+                    const settings = JSON.parse(saved);
+                    // Restaurar tablas
+                    if (settings.validTables) {
+                        for (let i = 1; i <= 10; i++) {
+                            const chk = document.getElementById('chkTable' + i);
+                            if (chk) chk.checked = settings.validTables.includes(i);
+                        }
+                        updateValidTables();
+                    }
+                    
+                    // Restaurar Radio Muro
+                    if (settings.ringRadius !== undefined) {
+                        updatePhysVar('RingRadius', settings.ringRadius);
+                        const slider = document.getElementById('sliderRingRadius');
+                        if (slider) slider.value = settings.ringRadius;
+                    }
+                    
+                    // Restaurar Muro Activo
+                    if (settings.ringActive !== undefined) {
+                        const chk = document.getElementById('chkRingActive');
+                        if (chk) {
+                            chk.checked = settings.ringActive;
+                            toggleRingVisible(chk);
+                        }
+                    }
+                } catch (e) {
+                    console.error("Error cargando ajustes:", e);
+                }
+            }
+        }
+
+        // Inicializar al cargar
+        window.addEventListener('DOMContentLoaded', () => {
+            loadPhysicsSettings();
+        });
     </script>
 </head>
 <body>
@@ -638,7 +717,7 @@
             <div class="star-layer layer3"></div>
         </div>
         <h1 style="font-size: 36px; text-shadow: 2px 2px 0px #000; margin-bottom: 20px; color: #fff; z-index: 10;">MATH GRAVITY</h1>
-        
+
         <div style="margin-bottom: 30px; background: rgba(0,0,0,0.4); padding: 20px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.2); display: flex; flex-direction: column; align-items: center; gap: 10px;">
             <div style="display: flex; align-items: center; gap: 15px;">
                 <span id="label-mode" class="mode-label" style="color: #0ff;">MODO GEOMÉTRICO</span>
@@ -680,6 +759,11 @@
             <button class="menu-btn" onclick="startGameFromMenu(2)">2. ALEATORIO POR TABLA</button>
             <button class="menu-btn" onclick="startGameFromMenu(3)">3. SUPERVIVENCIA TOTAL</button>
         </div>
+
+        <!-- Botón de Reanudar Circular -->
+        <button id="btn-resume-game" onclick="resumeGame()" style="display: none; width: 80px; height: 80px; border-radius: 50%; background: #0f0; color: #000; border: none; cursor: pointer; z-index: 20; font-size: 50px; align-items: center; justify-content: center; box-shadow: 0 0 20px rgba(0,255,0,0.6); position: relative; margin-top: 20px; transition: 0.2s;">
+            <span style="display: inline-block; transform: scaleX(-1) rotate(120deg);">↺</span>
+        </button>
     </div>
 
     <div id="ui-overlay">
@@ -737,8 +821,8 @@
         </label>
     </div>
 
-    <!-- PANEL DE DEBUG PROVISORIO -->
-    <div id="debug-panel" style="display: none; position: absolute; bottom: 20px; left: 20px; background: rgba(0,0,0,0.85); color: #0f0; padding: 15px; border-radius: 8px; z-index: 1000; font-family: monospace; border: 1px solid #0f0; max-height: 85%; overflow-y: auto;">
+    <!-- PANEL DE DEBUG PROVISORIO (LABORATORIO) -->
+    <div id="debug-panel" style="display: none; position: absolute; bottom: 20px; left: 20px; background: rgba(0,0,0,0.85); color: #0f0; padding: 15px; border-radius: 8px; z-index: 1000; font-family: monospace; border: 1px solid #0f0; max-height: 85%; overflow-y: auto; width: 260px;">
         <h4 style="margin: 0 0 10px 0; color: #fff;">Laboratorio de Físicas</h4>
         
         <h5 style="margin: 5px 0; color: #ff0;">Tablas Activas:</h5>
@@ -755,43 +839,15 @@
             <label><input type="checkbox" id="chkTable10" onchange="updateValidTables()"> 10</label>
         </div>
 
-        <div style="margin-bottom: 20px;">
-            <label style="color: #0ff;">Volumen: <span class="volume-val-label">50%</span></label>
-            <div class="volume-slider-wrapper" style="height: 8px; margin-top: 5px;">
-                <input type="range" min="0" max="1" step="0.01" value="0.5" class="volume-slider" oninput="setGlobalVolume(this.value)">
-                <div class="volume-progress"></div>
-            </div>
-        </div>
+        <label>Radio Muro Energía: <span id="valRingRadius">0.15</span></label><br>
+        <input type="range" id="sliderRingRadius" min="0.1" max="0.8" step="0.05" value="0.15" oninput="updatePhysVar('RingRadius', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
         
-        <label>Aceleración (Fondo Trasero): <span id="valTension">0.5</span></label><br>
-        <input type="range" min="0.5" max="30" step="0.5" value="0.5" oninput="updatePhysVar('Tension', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
-
-        <label>Fuerza Transversal (Radio/Curva de Giro): <span id="valTurn">8.0</span></label><br>
-        <input type="range" min="1" max="30" step="0.5" value="8.0" oninput="updatePhysVar('Turn', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
-
-        <label>Motor (Auto-Empuje): <span id="valEngine">5</span></label><br>
-        <input type="range" min="0" max="600" step="1" value="5" oninput="updatePhysVar('Engine', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
-        
-        <label>Fricción (Patinar - Drag): <span id="valDrag">0.001</span></label><br>
-        <input type="range" min="0.001" max="0.3" step="0.005" value="0.001" oninput="updatePhysVar('Drag', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
-        
-        <label>Límite Velocidad Max: <span id="valMaxVel">150</span></label><br>
-        <input type="range" min="50" max="1500" step="50" value="150" oninput="updatePhysVar('MaxVel', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
-
-        <label>Ancho del Juego (Fondo Naranja): <span id="valGameWidth">---</span></label><br>
-        <input type="range" id="sliderGameWidth" min="300" max="2500" step="50" value="600" oninput="updatePhysVar('GameWidth', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
-
-        <label>Radio Muro Energía (Multiplicador): <span id="valRingRadius">0.15</span></label><br>
-        <input type="range" min="0.1" max="0.8" step="0.05" value="0.15" oninput="updatePhysVar('RingRadius', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
-        
-        <label style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; color: #fff;">
-            <input type="checkbox" checked onchange="toggleRingVisible(this)" style="transform: scale(1.3);">
+        <label style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px; color: #fff;">
+            <input type="checkbox" id="chkRingActive" checked onchange="toggleRingVisible(this)" style="transform: scale(1.3);">
             Muro de Energía Activo
         </label>
 
-        <hr style="border: 0.5px solid #0f0; margin: 15px 0;">
-        <label style="color: #ff0;">Ajuste Vertical UI (iPad/Notch): <span id="valTopOffset">-70</span></label><br>
-        <input type="range" id="sliderTopOffset" min="-150" max="150" step="5" value="-70" oninput="updatePhysVar('TopOffset', this.value)" style="width: 100%; margin-bottom: 10px;"><br>
+        <button id="btn-save-physics" onclick="savePhysicsSettings()" style="width: 100%; padding: 12px; background: #0f0; color: #000; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-family: monospace; font-size: 14px;">💾 GUARDAR</button>
     </div>
 
     <!-- PANEL DE ARMERIA -->
