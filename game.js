@@ -981,6 +981,10 @@ function create() {
         mathTextsGroup.clear(true, true);
         mathBlocksGroup.clear(true, true);
         
+        // Asegurar que el motor físico y animaciones se activen
+        this.physics.resume();
+        this.tweens.resumeAll();
+
         currentPhase = "WAITING_BLOCK";
         isGamePaused = false;
         window.isGamePaused = false;
@@ -988,6 +992,9 @@ function create() {
         tutorPausedGame = false;
         isGameOver = false;
         window.isGameOver = false;
+        singularityActive = false;
+        timeDilation = 1.0;
+        lightTravelActive = false;
         clearArrivalSonar(this);
         clearSatelliteDefense(this);
         clearSatelliteCapsule(this);
